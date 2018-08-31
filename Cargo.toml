@@ -1,0 +1,9 @@
+[package]
+name = "rayn"
+version = "0.1.0"
+authors = ["Gray Olson <gray@grayolson.com>"]
+
+[dependencies]
+# vek = { version =  "0.9.4", features = ["repr_simd"] }
+vek = "0.9.4"
+image = "0.19"
