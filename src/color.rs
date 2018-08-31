@@ -8,6 +8,9 @@ impl Color {
     pub fn zero() -> Self {
         Color(Vec3::zero())
     }
+    pub fn gamma_correct(self, gamma: f32) -> Self {
+        Color(Vec3::new(self.0.x.powf(1.0/gamma), self.0.y.powf(1.0/gamma), self.0.z.powf(1.0/gamma)))
+    }
 }
 
 impl From<Color> for image::Rgb<u8> {
@@ -33,3 +36,12 @@ impl ::std::ops::Div<f32> for Color {
         Color(self.0 / other)
     }
 }
+
+impl ::std::ops::Mul<f32> for Color {
+    type Output = Color;
+
+    fn mul(self, other: f32) -> Color {
+        Color(self.0 * other)
+    }
+}
+

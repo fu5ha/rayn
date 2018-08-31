@@ -34,13 +34,10 @@ impl ::std::ops::Deref for HitableList {
 
 impl Hitable for HitableList {
     fn hit(&self, ray: &Ray, t_range: ::std::ops::Range<f32>) -> Option<HitRecord> {
-        // print!("| ");
         let ret = self.iter()
             .fold((None, t_range.end), |acc, hitable| {
                 let mut closest = acc.1;
-                // print!("{} ", closest);
                 let hr = hitable.hit(ray, t_range.start..closest);
-                // print!("{:?} | ", hr);
                 if let Some(HitRecord{t, p: _, n: _}) = hr {
                     closest = t;
                 }
@@ -48,7 +45,6 @@ impl Hitable for HitableList {
                 (hr, closest)
             })
             .0;
-        // println!(" | ");
         ret
     }
 }
