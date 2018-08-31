@@ -7,3 +7,5 @@ authors = ["Gray Olson <gray@grayolson.com>"]
 # vek = { version =  "0.9.4", features = ["repr_simd"] }
 vek = "0.9.4"
 image = "0.19"
+rand = "0.5.5"
+rayon = "1.0.2"
