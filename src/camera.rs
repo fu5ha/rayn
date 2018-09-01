@@ -1,5 +1,5 @@
+use math::Vec3;
 use ray::Ray;
-use super::Vec3;
 
 pub struct Camera {
     lower_left: Vec3,
@@ -10,9 +10,9 @@ pub struct Camera {
 impl Camera {
     pub fn new(aspect_ratio: f32) -> Self {
         Camera {
-            lower_left: Vec3::new(-aspect_ratio, -1.0, -1.0),
-            full_size: Vec3::new(aspect_ratio * 2.0, 2.0, 0.0),
-            origin: Vec3::zero(),
+            lower_left: Vec3::new(-aspect_ratio * 0.5, -0.5, -1.0),
+            full_size: Vec3::new(aspect_ratio, 1.0, 0.0),
+            origin: Vec3::new(0.0, 0.0, 1.0),
         }
     }
 

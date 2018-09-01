@@ -1,4 +1,4 @@
-use super::Vec3;
+use math::Vec3;
 
 pub struct Ray {
     orig: Vec3,

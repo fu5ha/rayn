@@ -4,7 +4,6 @@ extern crate rand;
 extern crate rayon;
 
 use std::sync::{Arc, RwLock};
-use std::f32::consts::PI;
 
 use rand::prelude::*;
 use rand::distributions::Uniform;
@@ -13,44 +12,35 @@ use rayon::prelude::*;
 mod camera;
 mod color;
 mod hitable;
+mod material;
+mod math;
 mod ray;
 mod sphere;
 
 use camera::Camera;
 use color::Color;
 use hitable::{Hitable, HitableList};
+use material::{Diffuse, Material, Metal, Refractive};
+use math::{Vec3};
 use sphere::Sphere;
 use ray::Ray;
 
-pub trait RandomInit {
-    fn rand(rng: &mut ThreadRng) -> Self;
-}
+const DIMS: (u32, u32) = (960, 540);
+const SAMPLES: usize = 128;
+const MAX_BOUNCES: usize = 50;
 
-pub type Vec3 = vek::vec::repr_c::Vec3<f32>;
-pub type Vec2 = vek::vec::repr_c::Vec2<f32>;
-
-impl RandomInit for Vec3 {
-    fn rand(rng: &mut ThreadRng) -> Self {
-        let theta = rng.gen_range::<f32>(0.0, 2.0 * PI);
-        let phi = rng.gen_range::<f32>(-1.0, 1.0);
-        let ophisq = (1.0 - phi * phi).sqrt();
-        Vec3::new(ophisq * theta.cos(), ophisq * theta.sin(), phi)
-    }
-}
-
-const DIMS: (u32, u32) = (1920, 1080);
-const SAMPLES: usize = 64;
-const MAX_BOUNCES: usize = 5;
-
-fn compute_color(ray: &Ray, hitables: Arc<RwLock<HitableList>>, rng: &mut ThreadRng, bounces: usize) -> Color {
+fn compute_color(ray: &Ray, hitables: Arc<RwLock<HitableList>>, bounces: usize) -> Color {
     let ht = &hitables.read().unwrap();
     if bounces < MAX_BOUNCES {
-        if let Some(record) = ht.hit(ray, 0.0001..100.0) {
-            let bounce = record.n + Vec3::rand(rng);
-            compute_color(&Ray::new(record.p, bounce), hitables.clone(), rng, bounces + 1) * 0.5
+        if let Some(record) = ht.hit(ray, 0.0001..1000.0) {
+            let scatter = record.material.scatter(ray, &record.n);
+            if let Some((attenuation, bounce)) = scatter {
+                compute_color(&Ray::new(record.p, bounce), hitables.clone(), bounces + 1) * attenuation
+            } else {
+                Color::zero()
+            }
         } else {
-            let mut dir = ray.dir().clone();
-            dir.normalize();
+            let dir = ray.dir().clone().normalized();
             let t = 0.5 * (dir.y + 1.0);
 
             Color(Vec3::lerp(Vec3::one(), Vec3::new(0.5, 0.7, 1.0), t))
@@ -65,9 +55,23 @@ fn main() {
 
     let camera = Arc::new(Camera::new(DIMS.0 as f32 / DIMS.1 as f32));
 
+    let pink_diffuse: Arc<Material> = Arc::new(Diffuse::new(Color::new(0.7, 0.3, 0.4), 0.0));
+    let ground: Arc<Material> = Arc::new(Diffuse::new(Color::new(0.35, 0.3, 0.45), 0.2));
+    let gold: Arc<Material> = Arc::new(Metal::new(Color::new(1.0, 0.9, 0.5), 0.0));
+    let gold_rough: Arc<Material> = Arc::new(Metal::new(Color::new(1.0, 0.9, 0.5), 0.2));
+    let silver: Arc<Material> = Arc::new(Metal::new(Color::new(0.9, 0.9, 0.9), 0.05));
+    let glass: Arc<Material> = Arc::new(Refractive::new(Color::new(0.9, 0.9, 0.9), 0.0, 1.5));
+    let glass_rough: Arc<Material> = Arc::new(Refractive::new(Color::new(0.9, 0.9, 0.9), 0.2, 1.5));
+
     let mut world = HitableList::new();
-    world.push(Box::new(Sphere::new(Vec3::new(0.0, -100.5, -1.0), 100.0)));
-    world.push(Box::new(Sphere::new(Vec3::new(0.0, 0.0, -1.0), 0.5)));
+    world.push(Box::new(Sphere::new(Vec3::new(0.0, -200.5, -1.0), 200.0, Arc::clone(&ground))));
+    world.push(Box::new(Sphere::new(Vec3::new(0.0, 0.0, -1.0), 0.5, Arc::clone(&silver))));
+    world.push(Box::new(Sphere::new(Vec3::new(-1.0, 0.0, -1.0), 0.5, Arc::clone(&pink_diffuse))));
+    world.push(Box::new(Sphere::new(Vec3::new(1.0, -0.25, -1.0), 0.25, Arc::clone(&gold))));
+    world.push(Box::new(Sphere::new(Vec3::new(0.4, -0.375, -0.5), 0.125, Arc::clone(&glass))));
+    world.push(Box::new(Sphere::new(Vec3::new(0.2, -0.4, -0.35), 0.1, Arc::clone(&glass))));
+    world.push(Box::new(Sphere::new(Vec3::new(-0.25, -0.375, -0.15), 0.125, Arc::clone(&glass_rough))));
+    world.push(Box::new(Sphere::new(Vec3::new(-0.5, -0.375, -0.5), 0.125, Arc::clone(&gold_rough))));
 
     let world = Arc::new(RwLock::new(world));
 
@@ -88,7 +92,7 @@ fn main() {
                     let uv = Vec3::new((x as f32 + r1) / DIMS.0 as f32, (y as f32 + r2) / DIMS.1 as f32, 0.0);
                     // let uv = Vec3::new(x as f32 / DIMS.0 as f32, y as f32 / DIMS.1 as f32, 0.0);
                     let ray = camera.clone().get_ray(uv);
-                    compute_color(&ray, world.clone(), &mut rng, 0)
+                    compute_color(&ray, world.clone(), 0)
                 })
                 .fold(Color::zero(), |a, b| a + b);
             let col = col / SAMPLES as f32;
