@@ -1,6 +1,7 @@
 [package]
 name = "rayn"
 version = "0.1.0"
+license-file = "LICENSE.md"
 authors = ["Gray Olson <gray@grayolson.com>"]
 
 [dependencies]
