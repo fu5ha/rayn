@@ -1,11 +1,14 @@
 use std::f32::consts::PI;
 
 use rand::prelude::*;
-use vek::vec::repr_c;
+use vek::vec;
 
 use color::Color;
 
-pub type Vec3 = repr_c::Vec3<f32>;
+#[cfg(features = "simd")]
+pub type Vec3 = vec::repr_simd::Vec3<f32>;
+#[cfg(not(features = "simd"))]
+pub type Vec3 = vec::repr_c::Vec3<f32>;
 
 pub trait RandomInit {
     fn rand(rng: &mut ThreadRng) -> Self;

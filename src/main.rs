@@ -3,6 +3,7 @@ extern crate rand;
 extern crate rayon;
 extern crate vek;
 
+use std::time::Instant;
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::{Arc, RwLock};
 
@@ -27,13 +28,13 @@ use ray::Ray;
 use sphere::Sphere;
 
 const DIMS: (u32, u32) = (1920, 1080);
-const SAMPLES: usize = 256;
+const SAMPLES: usize = 2048;
 const MAX_BOUNCES: usize = 50;
 
 fn compute_color(ray: &Ray, hitables: Arc<RwLock<HitableList>>, bounces: usize) -> Color {
     let ht = &hitables.read().unwrap();
     if bounces < MAX_BOUNCES {
-        if let Some(record) = ht.hit(ray, 0.0001..1000.0) {
+        if let Some(record) = ht.hit(ray, 0.001..1000.0) {
             let scatter = record.material.scatter(ray, &record.n);
             if let Some((attenuation, bounce)) = scatter {
                 compute_color(&Ray::new(record.p, bounce), hitables.clone(), bounces + 1)
@@ -112,6 +113,7 @@ fn main() {
     let mut pixels = vec![Color::zero(); DIMS.0 as usize * DIMS.1 as usize];
 
     let mutated = AtomicUsize::new(0);
+    let start = Instant::now();
 
     pixels.par_iter_mut().enumerate().for_each(|(i, p)| {
         let x = i % DIMS.0 as usize;
@@ -133,11 +135,11 @@ fn main() {
             }).fold(Color::zero(), |a, b| a + b);
         let col = col / SAMPLES as f32;
         *p = col;
-        let n = mutated.fetch_add(1, Ordering::Relaxed);
-        if n % DIMS.0 as usize == 0 {
+        if i % 100000 == 0 {
+            let n = mutated.fetch_add(1, Ordering::Relaxed);
             println!(
                 "{}% finished...",
-                n as f32 / (DIMS.0 * DIMS.1) as f32 * 100.0
+                n as f32 / (DIMS.0 * DIMS.1) as f32 * 100.0 * 100000.0
             );
         }
     });
@@ -146,6 +148,12 @@ fn main() {
         let idx = x + (DIMS.1 - 1 - y) * DIMS.0;
         *pixel = pixels[idx as usize].gamma_correct(2.2).into();
     }
+
+    let time = Instant::now() - start;
+    let time_secs = time.as_secs();
+    let time_millis = time.subsec_millis();
+
+    println!("Done in {} seconds.", time_secs as f32 + time_millis as f32 / 1000.0);
 
     img.save("render_working.png").unwrap();
 }

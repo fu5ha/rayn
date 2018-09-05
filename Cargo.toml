@@ -4,8 +4,10 @@ version = "0.1.0"
 license-file = "LICENSE.md"
 authors = ["Gray Olson <gray@grayolson.com>"]
 
+[features]
+simd = []
+
 [dependencies]
-# vek = { version =  "0.9.4", features = ["repr_simd"] }
 vek = "0.9.4"
 image = "0.19"
 rand = "0.5.5"
