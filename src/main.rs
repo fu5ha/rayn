@@ -115,7 +115,6 @@ fn main() {
         let x = i % DIMS.0 as usize;
         let y = (i - x) / DIMS.0 as usize;
         let col = (0..SAMPLES)
-            .into_iter()
             .map(|_| {
                 let mut rng = thread_rng();
                 let uniform = Uniform::new(0.0, 1.0);
@@ -132,11 +131,11 @@ fn main() {
             .fold(Color::zero(), |a, b| a + b);
         let col = col / SAMPLES as f32;
         *p = col;
-        if i % 100000 == 0 {
+        if i % 100_000 == 0 {
             let n = mutated.fetch_add(1, Ordering::Relaxed);
             println!(
                 "{}% finished...",
-                n as f32 / (DIMS.0 * DIMS.1) as f32 * 100.0 * 100000.0
+                n as f32 / (DIMS.0 * DIMS.1) as f32 * 100.0 * 100_000.0
             );
         }
     });
@@ -154,7 +153,7 @@ fn main() {
         "Done in {} seconds.",
         time_secs as f32 + time_millis as f32 / 1000.0
     );
-    let args: Vec<String> = std::env::args().into_iter().collect();
+    let args: Vec<String> = std::env::args().collect();
     let default = String::from("render.png");
     let filename = args.get(1).unwrap_or(&default);
     println!("Saving to {}", filename);

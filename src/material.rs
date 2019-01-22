@@ -21,14 +21,14 @@ impl Diffuse {
 
 impl Material for Diffuse {
     fn scatter(&self, ray: &Ray, norm: &Vec3) -> Option<(Color, Vec3)> {
-        let norm = norm.clone();
+        let norm = *norm;
         let cos = saturate(norm.normalized().dot(ray.dir().clone().normalized() * -1.0));
         // println!("{}", cos);
         let fresnel = f_schlick(cos, 0.04);
         let bounce = if thread_rng().gen::<f32>() > fresnel {
             norm + Vec3::rand(&mut thread_rng())
         } else {
-            ray.dir().reflected(norm.clone()) + (Vec3::rand(&mut thread_rng()) * self.roughness)
+            ray.dir().reflected(norm) + (Vec3::rand(&mut thread_rng()) * self.roughness)
         };
         Some((self.albedo, bounce))
     }
@@ -70,16 +70,16 @@ impl Refractive {
 
 impl Material for Refractive {
     fn scatter(&self, ray: &Ray, norm: &Vec3) -> Option<(Color, Vec3)> {
-        let norm = norm.clone();
+        let norm = *norm;
         let (refract_norm, eta, cos) = if ray.dir().dot(norm) > 0.0 {
             (
-                norm.clone() * -1.0,
+                norm * -1.0,
                 self.ior,
                 norm.normalized().dot(ray.dir().clone().normalized()),
             )
         } else {
             (
-                norm.clone(),
+                norm,
                 1.0 / self.ior,
                 -norm.normalized().dot(ray.dir().clone().normalized()),
             )

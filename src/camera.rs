@@ -17,6 +17,6 @@ impl Camera {
     }
 
     pub fn get_ray(&self, uv: Vec3) -> Ray {
-        Ray::new(self.origin.clone(), self.lower_left + self.full_size * uv)
+        Ray::new(self.origin, self.lower_left + self.full_size * uv)
     }
 }
