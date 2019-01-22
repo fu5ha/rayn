@@ -1,19 +1,17 @@
-use std::sync::Arc;
-
-use material::Material;
-use math::Vec3;
-use ray::Ray;
+use crate::material::Material;
+use crate::math::Vec3;
+use crate::ray::Ray;
 
 #[derive(Clone)]
-pub struct HitRecord {
+pub struct HitRecord<'a> {
     pub t: f32,
     pub p: Vec3,
     pub n: Vec3,
-    pub material: Arc<Material>,
+    pub material: &'a Material,
 }
 
-impl HitRecord {
-    pub fn new(t: f32, p: Vec3, n: Vec3, material: Arc<Material>) -> Self {
+impl<'a> HitRecord<'a> {
+    pub fn new(t: f32, p: Vec3, n: Vec3, material: &'a Material) -> Self {
         HitRecord { t, p, n, material }
     }
 }
@@ -60,7 +58,8 @@ impl Hitable for HitableList {
                 }
                 let hr = if hr.is_some() { hr } else { acc.0 };
                 (hr, closest)
-            }).0;
+            })
+            .0;
         ret
     }
 }

@@ -1,5 +1,5 @@
+use crate::math::Vec3;
 use image;
-use math::Vec3;
 
 #[derive(Clone, Copy, Debug)]
 pub struct Color(pub Vec3);

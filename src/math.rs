@@ -3,7 +3,7 @@ use std::f32::consts::PI;
 use rand::prelude::*;
 use vek::vec;
 
-use color::Color;
+use crate::color::Color;
 
 #[cfg(features = "simd")]
 pub type Vec3 = vec::repr_simd::Vec3<f32>;

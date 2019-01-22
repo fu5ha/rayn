@@ -1,5 +1,5 @@
-use math::Vec3;
-use ray::Ray;
+use crate::math::Vec3;
+use crate::ray::Ray;
 
 pub struct Camera {
     lower_left: Vec3,

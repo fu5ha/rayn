@@ -1,18 +1,16 @@
-use std::sync::Arc;
+use crate::hitable::{HitRecord, Hitable};
+use crate::material::Material;
+use crate::math::Vec3;
+use crate::ray::Ray;
 
-use hitable::{HitRecord, Hitable};
-use material::Material;
-use math::Vec3;
-use ray::Ray;
-
-pub struct Sphere {
+pub struct Sphere<'a> {
     orig: Vec3,
     rad: f32,
-    material: Arc<Material>,
+    material: &'a Material,
 }
 
-impl Sphere {
-    pub fn new(orig: Vec3, rad: f32, material: Arc<Material>) -> Self {
+impl<'a> Sphere<'a> {
+    pub fn new(orig: Vec3, rad: f32, material: &'a impl Material) -> Self {
         Sphere {
             orig,
             rad,
@@ -24,7 +22,7 @@ impl Sphere {
     }
 }
 
-impl Hitable for Sphere {
+impl<'a> Hitable for Sphere<'a> {
     fn hit(&self, ray: &Ray, t_range: ::std::ops::Range<f32>) -> Option<HitRecord> {
         let oc = ray.orig() - self.orig;
         let a = ray.dir().dot(ray.dir().clone());
@@ -39,14 +37,14 @@ impl Hitable for Sphere {
                 let p = ray.point_at(t);
                 let mut n = p - self.orig();
                 n /= self.rad;
-                return Some(HitRecord::new(t, p, n, Arc::clone(&self.material)));
+                return Some(HitRecord::new(t, p, n, self.material));
             }
             let t = (-b + desc_sqrt) / (2.0 * a);
             if t > t_range.start && t < t_range.end {
                 let p = ray.point_at(t);
                 let mut n = p - self.orig();
                 n /= self.rad;
-                return Some(HitRecord::new(t, p, n, Arc::clone(&self.material)));
+                return Some(HitRecord::new(t, p, n, self.material));
             }
         }
         None

@@ -1,8 +1,8 @@
 use rand::prelude::*;
 
-use color::Color;
-use math::{f0_from_ior, f_schlick, f_schlick_c, saturate, RandomInit, Vec3};
-use ray::Ray;
+use crate::color::Color;
+use crate::math::{f0_from_ior, f_schlick, f_schlick_c, saturate, RandomInit, Vec3};
+use crate::ray::Ray;
 
 pub trait Material: Send + Sync {
     fn scatter(&self, ray: &Ray, norm: &Vec3) -> Option<(Color, Vec3)>;
