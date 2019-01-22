@@ -154,6 +154,10 @@ fn main() {
         "Done in {} seconds.",
         time_secs as f32 + time_millis as f32 / 1000.0
     );
+    let args: Vec<String> = std::env::args().into_iter().collect();
+    let default = String::from("render.png");
+    let filename = args.get(1).unwrap_or(&default);
+    println!("Saving to {}", filename);
 
-    img.save("render_working.png").unwrap();
+    img.save(filename).unwrap();
 }
