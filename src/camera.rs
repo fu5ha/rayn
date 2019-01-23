@@ -1,5 +1,5 @@
-use math::Vec3;
-use ray::Ray;
+use crate::math::Vec3;
+use crate::ray::Ray;
 
 pub struct Camera {
     lower_left: Vec3,
@@ -17,6 +17,6 @@ impl Camera {
     }
 
     pub fn get_ray(&self, uv: Vec3) -> Ray {
-        Ray::new(self.origin.clone(), self.lower_left + self.full_size * uv)
+        Ray::new(self.origin, self.lower_left + self.full_size * uv)
     }
 }

@@ -3,6 +3,7 @@ name = "rayn"
 version = "0.1.0"
 license-file = "LICENSE.md"
 authors = ["Gray Olson <gray@grayolson.com>"]
+edition = "2018"
 
 [features]
 simd = []
@@ -12,3 +13,4 @@ vek = "0.9.4"
 image = "0.19"
 rand = "0.5.5"
 rayon = "1.0.2"
+lazy_static = "1.2.0"

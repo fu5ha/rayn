@@ -1,19 +1,17 @@
-use std::sync::Arc;
-
-use material::Material;
-use math::Vec3;
-use ray::Ray;
+use crate::material::Material;
+use crate::math::Vec3;
+use crate::ray::Ray;
 
 #[derive(Clone)]
-pub struct HitRecord {
+pub struct HitRecord<'a> {
     pub t: f32,
     pub p: Vec3,
     pub n: Vec3,
-    pub material: Arc<Material>,
+    pub material: &'a Material,
 }
 
-impl HitRecord {
-    pub fn new(t: f32, p: Vec3, n: Vec3, material: Arc<Material>) -> Self {
+impl<'a> HitRecord<'a> {
+    pub fn new(t: f32, p: Vec3, n: Vec3, material: &'a Material) -> Self {
         HitRecord { t, p, n, material }
     }
 }
@@ -44,23 +42,16 @@ impl ::std::ops::Deref for HitableList {
 
 impl Hitable for HitableList {
     fn hit(&self, ray: &Ray, t_range: ::std::ops::Range<f32>) -> Option<HitRecord> {
-        let ret = self
-            .iter()
+        self.iter()
             .fold((None, t_range.end), |acc, hitable| {
                 let mut closest = acc.1;
                 let hr = hitable.hit(ray, t_range.start..closest);
-                if let Some(HitRecord {
-                    t,
-                    p: _,
-                    n: _,
-                    material: _,
-                }) = hr
-                {
+                if let Some(HitRecord { t, .. }) = hr {
                     closest = t;
                 }
                 let hr = if hr.is_some() { hr } else { acc.0 };
                 (hr, closest)
-            }).0;
-        ret
+            })
+            .0
     }
 }
