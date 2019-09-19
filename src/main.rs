@@ -109,8 +109,8 @@ fn main() {
     let mut img = image::RgbImage::new(DIMS.0, DIMS.1);
 
     let camera_position_sequence: Sequence<[f32; 3]> = Sequence::new(
-        vec![0.0, 1.0],
-        vec![[-1.0, 0.0, 1.0], [1.0, 0.0, 1.0]],
+        vec![0.0, 0.5, 1.5],
+        vec![[-1.0, 0.0, 1.0], [-1.0, 0.0, 1.0], [1.0, 0.0, 1.0]],
         minterpolate::InterpolationFunction::Linear,
         false,
     );
@@ -119,53 +119,62 @@ fn main() {
 
     let mut pixels = vec![Color::zero(); DIMS.0 as usize * DIMS.1 as usize];
 
-    let mutated = AtomicUsize::new(0);
-    let start = Instant::now();
+    let frame_range = 0..45;
+    let time_range = 0f32..1.5f32;
+    let shutter_time = (time_range.end - time_range.start) / (frame_range.end - frame_range.start) as f32;
 
-    pixels.par_iter_mut().enumerate().for_each(|(i, p)| {
-        let x = i % DIMS.0 as usize;
-        let y = (i - x) / DIMS.0 as usize;
-        let col = (0..SAMPLES)
-            .map(|_| {
-                let mut rng = thread_rng();
-                let uniform = Uniform::new(0.0, 1.0);
-                let (r1, r2) = (uniform.sample(&mut rng), uniform.sample(&mut rng));
-                let uv = Vec2::new(
-                    (x as f32 + r1) / DIMS.0 as f32,
-                    (y as f32 + r2) / DIMS.1 as f32,
+    for frame in frame_range {
+        let mutated = AtomicUsize::new(0);
+        let start = Instant::now();
+
+        let frame_start = time_range.start + frame as f32 * shutter_time;
+        let frame_end = frame_start + shutter_time;
+
+        pixels.par_iter_mut().enumerate().for_each(|(i, p)| {
+            let x = i % DIMS.0 as usize;
+            let y = (i - x) / DIMS.0 as usize;
+            let col = (0..SAMPLES)
+                .map(|_| {
+                    let mut rng = thread_rng();
+                    let uniform = Uniform::new(0.0, 1.0);
+                    let (r1, r2) = (uniform.sample(&mut rng), uniform.sample(&mut rng));
+                    let uv = Vec2::new(
+                        (x as f32 + r1) / DIMS.0 as f32,
+                        (y as f32 + r2) / DIMS.1 as f32,
+                    );
+                    let ray = camera.clone().get_ray(uv, rng.gen_range(frame_start, frame_end));
+                    compute_color(ray, &mut rng, 0)
+                })
+                .fold(Color::zero(), |a, b| a + b);
+            let col = col / SAMPLES as f32;
+            *p = col;
+            if i % 100_000 == 0 {
+                let n = mutated.fetch_add(1, Ordering::Relaxed);
+                println!(
+                    "{}% finished...",
+                    (n as f32 / (DIMS.0 * DIMS.1) as f32 * 100.0 * 100_000.0).round() as u32
                 );
-                let ray = camera.clone().get_ray(uv, rng.gen_range(0.0f32, 0.1f32));
-                compute_color(ray, &mut rng, 0)
-            })
-            .fold(Color::zero(), |a, b| a + b);
-        let col = col / SAMPLES as f32;
-        *p = col;
-        if i % 100_000 == 0 {
-            let n = mutated.fetch_add(1, Ordering::Relaxed);
-            println!(
-                "{}% finished...",
-                (n as f32 / (DIMS.0 * DIMS.1) as f32 * 100.0 * 100_000.0).round() as u32
-            );
+            }
+        });
+
+        for (x, y, pixel) in img.enumerate_pixels_mut() {
+            let idx = x + (DIMS.1 - 1 - y) * DIMS.0;
+            *pixel = pixels[idx as usize].gamma_correct(2.2).into();
         }
-    });
 
-    for (x, y, pixel) in img.enumerate_pixels_mut() {
-        let idx = x + (DIMS.1 - 1 - y) * DIMS.0;
-        *pixel = pixels[idx as usize].gamma_correct(2.2).into();
+        let time = Instant::now() - start;
+        let time_secs = time.as_secs();
+        let time_millis = time.subsec_millis();
+
+        println!(
+            "Done in {} seconds.",
+            time_secs as f32 + time_millis as f32 / 1000.0
+        );
+        let args: Vec<String> = std::env::args().collect();
+        let default = String::from(format!("frame{}.png", frame));
+        let filename = args.get(1).unwrap_or(&default);
+        println!("Saving to {}", filename);
+
+        img.save(filename).unwrap();
     }
-
-    let time = Instant::now() - start;
-    let time_secs = time.as_secs();
-    let time_millis = time.subsec_millis();
-
-    println!(
-        "Done in {} seconds.",
-        time_secs as f32 + time_millis as f32 / 1000.0
-    );
-    let args: Vec<String> = std::env::args().collect();
-    let default = String::from("render.png");
-    let filename = args.get(1).unwrap_or(&default);
-    println!("Saving to {}", filename);
-
-    img.save(filename).unwrap();
 }
