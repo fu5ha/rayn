@@ -5,14 +5,14 @@ use crate::ray::Ray;
 #[derive(Clone)]
 pub struct HitRecord<'a> {
     pub t: f32,
-    pub p: Vec3,
-    pub n: Vec3,
-    pub material: &'a Material,
+    pub point: Vec3,
+    pub normal: Vec3,
+    pub material: &'a dyn Material,
 }
 
 impl<'a> HitRecord<'a> {
-    pub fn new(t: f32, p: Vec3, n: Vec3, material: &'a Material) -> Self {
-        HitRecord { t, p, n, material }
+    pub fn new(t: f32, point: Vec3, normal: Vec3, material: &'a dyn Material) -> Self {
+        HitRecord { t, point, normal, material }
     }
 }
 
@@ -20,22 +20,22 @@ pub trait Hitable: Send + Sync {
     fn hit(&self, ray: &Ray, t_range: ::std::ops::Range<f32>) -> Option<HitRecord>;
 }
 
-pub struct HitableList(Vec<Box<Hitable>>);
+pub struct HitableList(Vec<Box<dyn Hitable>>);
 
 impl HitableList {
     pub fn new() -> Self {
         HitableList(Vec::new())
     }
 
-    pub fn push(&mut self, hitable: Box<Hitable>) {
+    pub fn push(&mut self, hitable: Box<dyn Hitable>) {
         self.0.push(hitable)
     }
 }
 
 impl ::std::ops::Deref for HitableList {
-    type Target = Vec<Box<Hitable>>;
+    type Target = Vec<Box<dyn Hitable>>;
 
-    fn deref(&self) -> &Vec<Box<Hitable>> {
+    fn deref(&self) -> &Vec<Box<dyn Hitable>> {
         &self.0
     }
 }

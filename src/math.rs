@@ -5,10 +5,16 @@ use vek::vec;
 
 use crate::color::Color;
 
-#[cfg(features = "simd")]
-pub type Vec3 = vec::repr_simd::Vec3<f32>;
-#[cfg(not(features = "simd"))]
+pub type Vec4 = vec::repr_c::Vec4<f32>;
 pub type Vec3 = vec::repr_c::Vec3<f32>;
+pub type Vec2 = vec::repr_c::Vec2<f32>;
+
+pub type Quat = vek::quaternion::repr_c::Quaternion<f32>;
+
+pub struct Transform {
+    pub position: Vec3,
+    pub orientation: Quat,
+}
 
 pub trait RandomInit {
     fn rand(rng: &mut ThreadRng) -> Self;
@@ -16,8 +22,8 @@ pub trait RandomInit {
 
 impl RandomInit for Vec3 {
     fn rand(rng: &mut ThreadRng) -> Self {
-        let theta = rng.gen_range::<f32>(0.0, 2.0 * PI);
-        let phi = rng.gen_range::<f32>(-1.0, 1.0);
+        let theta = rng.gen_range(0f32, 2f32 * PI);
+        let phi = rng.gen_range(-1f32, 1f32);
         let ophisq = (1.0 - phi * phi).sqrt();
         Vec3::new(ophisq * theta.cos(), ophisq * theta.sin(), phi)
     }

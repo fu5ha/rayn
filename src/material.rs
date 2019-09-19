@@ -1,36 +1,48 @@
 use rand::prelude::*;
 
 use crate::color::Color;
+use crate::hitable::HitRecord;
 use crate::math::{f0_from_ior, f_schlick, f_schlick_c, saturate, RandomInit, Vec3};
 use crate::ray::Ray;
 
-pub trait Material: Send + Sync {
-    fn scatter(&self, ray: &Ray, norm: &Vec3) -> Option<(Color, Vec3)>;
+pub struct ScatteringEvent {
+    pub out_dir: Vec3,
+    pub out_ior: f32,
+    pub attenuation: Color,
+    pub emission: Color,
 }
 
-pub struct Diffuse {
+pub trait Material: Send + Sync {
+    fn scatter(&self, ray: &Ray, record: &HitRecord, rng: &mut ThreadRng) -> Option<ScatteringEvent>;
+}
+
+pub struct Dielectric {
     albedo: Color,
     roughness: f32,
 }
 
-impl Diffuse {
+impl Dielectric {
     pub fn new(albedo: Color, roughness: f32) -> Self {
-        Diffuse { albedo, roughness }
+        Dielectric { albedo, roughness }
     }
 }
 
-impl Material for Diffuse {
-    fn scatter(&self, ray: &Ray, norm: &Vec3) -> Option<(Color, Vec3)> {
-        let norm = *norm;
-        let cos = saturate(norm.normalized().dot(ray.dir().clone().normalized() * -1.0));
-        // println!("{}", cos);
+impl Material for Dielectric {
+    fn scatter(&self, ray: &Ray, record: &HitRecord, rng: &mut ThreadRng) -> Option<ScatteringEvent> {
+        let norm = record.normal;
+        let cos = saturate(norm.dot(*ray.dir() * -1.0));
         let fresnel = f_schlick(cos, 0.04);
-        let bounce = if thread_rng().gen::<f32>() > fresnel {
-            norm + Vec3::rand(&mut thread_rng())
+        let (attenuation, bounce) = if rng.gen::<f32>() > fresnel {
+            (self.albedo, norm + Vec3::rand(rng))
         } else {
-            ray.dir().reflected(norm) + (Vec3::rand(&mut thread_rng()) * self.roughness)
+            (Color::new(1.0, 1.0, 1.0), ray.dir().reflected(norm) + (Vec3::rand(rng) * self.roughness))
         };
-        Some((self.albedo, bounce))
+        Some(ScatteringEvent {
+            out_dir: bounce.normalized(),
+            out_ior: ray.medium_ior(),
+            attenuation,
+            emission: Color::zero()
+        })
     }
 }
 
@@ -46,13 +58,16 @@ impl Metal {
 }
 
 impl Material for Metal {
-    fn scatter(&self, ray: &Ray, norm: &Vec3) -> Option<(Color, Vec3)> {
-        let bounce =
-            ray.dir().reflected(norm.clone()) + Vec3::rand(&mut thread_rng()) * self.roughness;
-        let cos = saturate(norm.normalized().dot(ray.dir().clone().normalized() * -1.0));
+    fn scatter(&self, ray: &Ray, record: &HitRecord, rng: &mut ThreadRng) -> Option<ScatteringEvent> {
+        let bounce = ray.dir().reflected(record.normal) + Vec3::rand(rng) * self.roughness;
+        let cos = saturate(record.normal.dot(ray.dir() * -1.0));
         let attenuation = f_schlick_c(cos, self.f0);
-        // let attenuation = self.f0;
-        Some((attenuation, bounce))
+        Some(ScatteringEvent {
+            out_dir: bounce.normalized(),
+            out_ior: ray.medium_ior(),
+            attenuation,
+            emission: Color::zero()
+        })
     }
 }
 
@@ -69,35 +84,40 @@ impl Refractive {
 }
 
 impl Material for Refractive {
-    fn scatter(&self, ray: &Ray, norm: &Vec3) -> Option<(Color, Vec3)> {
-        let norm = *norm;
+    fn scatter(&self, ray: &Ray, record: &HitRecord, rng: &mut ThreadRng) -> Option<ScatteringEvent> {
+        let norm = record.normal;
         let (refract_norm, eta, cos) = if ray.dir().dot(norm) > 0.0 {
             (
                 norm * -1.0,
-                self.ior,
-                norm.normalized().dot(ray.dir().clone().normalized()),
+                self.ior / ray.medium_ior(),
+                norm.dot(*ray.dir()),
             )
         } else {
             (
                 norm,
-                1.0 / self.ior,
-                -norm.normalized().dot(ray.dir().clone().normalized()),
+                ray.medium_ior() / self.ior,
+                -norm.dot(*ray.dir()),
             )
         };
         let f0 = f0_from_ior(self.ior);
         let fresnel = f_schlick(saturate(cos), f0);
         // println!("{}", fresnel);
-        let bounce = if thread_rng().gen::<f32>() > fresnel {
-            let mut refract = ray.dir().refracted(refract_norm, eta)
-                + (Vec3::rand(&mut thread_rng()) * self.roughness);
+        let (bounce, out_ior) = if rng.gen::<f32>() > fresnel {
+            let refract = ray.dir().refracted(refract_norm, eta)
+                + (Vec3::rand(rng) * self.roughness);
             if refract == Vec3::zero() {
-                refract =
-                    ray.dir().reflected(norm) + (Vec3::rand(&mut thread_rng()) * self.roughness);
+                return None;
             }
-            refract
+            (refract, self.ior)
         } else {
-            ray.dir().reflected(norm) + (Vec3::rand(&mut thread_rng()) * self.roughness)
+            (ray.dir().reflected(norm) + (Vec3::rand(rng) * self.roughness), ray.medium_ior())
         };
-        Some((self.f0, bounce))
+
+        Some(ScatteringEvent {
+            out_dir: bounce.normalized(),
+            out_ior,
+            attenuation: self.f0,
+            emission: Color::zero()
+        })
     }
 }

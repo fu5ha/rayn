@@ -1,22 +1,30 @@
-use crate::math::Vec3;
+use crate::math::{ Vec2, Vec3, Transform };
 use crate::ray::Ray;
+use crate::animation::Sequenced;
 
-pub struct Camera {
-    lower_left: Vec3,
-    full_size: Vec3,
-    origin: Vec3,
+pub trait Camera {
+    fn get_ray(&self, uv: Vec2, time: f32) -> Ray;
 }
 
-impl Camera {
-    pub fn new(aspect_ratio: f32) -> Self {
-        Camera {
+pub struct PinholeCamera {
+    lower_left: Vec3,
+    full_size: Vec3,
+    transform_sequence: Box<dyn Sequenced<Transform>>,
+}
+
+impl PinholeCamera {
+    pub fn new(aspect_ratio: f32, transform_sequence: Box<dyn Sequenced<Transform>>) -> Self {
+        PinholeCamera {
             lower_left: Vec3::new(-aspect_ratio * 0.5, -0.5, -1.0),
             full_size: Vec3::new(aspect_ratio, 1.0, 0.0),
-            origin: Vec3::new(0.0, 0.0, 1.0),
+            transform_sequence,
         }
     }
+}
 
-    pub fn get_ray(&self, uv: Vec3) -> Ray {
-        Ray::new(self.origin, self.lower_left + self.full_size * uv)
+impl Camera for PinholeCamera {
+    fn get_ray(&self, uv: Vec2, time: f32) -> Ray {
+        let transform = self.transform_sequence.sample_at(time);
+        Ray::new(transform.position, transform.orientation * (self.lower_left + self.full_size * uv).normalized(), 1.0)
     }
 }

@@ -22,13 +22,11 @@ impl Color {
 
 impl From<Color> for image::Rgb<u8> {
     fn from(col: Color) -> Self {
-        image::Rgb {
-            data: [
-                (col.0.x * 255.0) as u8,
-                (col.0.y * 255.0) as u8,
-                (col.0.z * 255.0) as u8,
-            ],
-        }
+        image::Rgb([
+            (col.0.x * 255.0) as u8,
+            (col.0.y * 255.0) as u8,
+            (col.0.z * 255.0) as u8,
+        ])
     }
 }
 

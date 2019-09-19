@@ -5,12 +5,10 @@ license-file = "LICENSE.md"
 authors = ["Gray Olson <gray@grayolson.com>"]
 edition = "2018"
 
-[features]
-simd = []
-
 [dependencies]
-vek = "0.9.4"
-image = "0.19"
-rand = "0.5.5"
-rayon = "1.0.2"
-lazy_static = "1.2.0"
+vek = "0.9"
+image = "0.22"
+rand = "0.7"
+rayon = "1.2"
+lazy_static = "1.2"
+minterpolate = "0.4"
