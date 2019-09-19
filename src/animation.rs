@@ -1,22 +1,27 @@
-use crate::math::{ Vec3, Vec4, Quat, Transform };
+use crate::math::{ Vec2, Vec3, Vec4, Quat, Transform };
 
 use minterpolate::{ InterpolationFunction, InterpolationPrimitive };
-
-/// A marker trait for types that are inherently sequenced
-pub trait InherentlySequenced {}
-
-impl InherentlySequenced for f32 {}
-impl InherentlySequenced for Vec3 {}
-impl InherentlySequenced for Quat {}
 
 /// A generic object which contains a property of type T which is sequenced over time.
 pub trait Sequenced<T>: Send + Sync {
     fn sample_at(&self, t: f32) -> T;
 }
 
-impl<T: InherentlySequenced + Send + Sync + Clone> Sequenced<T> for T {
-    fn sample_at(&self, _t: f32) -> Self {
-        self.clone()
+macro_rules! impl_inherent_sequenced {
+    ($($type:ty,)*) => {
+        $(impl Sequenced<$type> for $type {
+            fn sample_at(&self, _t: f32) -> Self {
+                self.clone()
+            }
+        })*
+    }
+}
+
+impl_inherent_sequenced!(f32, usize, u32, i32, isize, Vec2, Vec3, Quat, Transform,);
+
+impl<T, F: Fn(f32) -> T + Send + Sync> Sequenced<T> for F {
+    fn sample_at(&self, t: f32) -> T {
+        self(t)
     }
 }
 
@@ -39,23 +44,27 @@ impl<T: InterpolationPrimitive + Clone + Send + Sync> Sequence<T> {
     pub fn new(inputs: Vec<f32>, outputs: Vec<T>, interpolation: InterpolationFunction<T>, normalize: bool) -> Self {
         Sequence { inputs, outputs, interpolation, normalize }
     }
-}
 
-impl<T: InterpolationPrimitive + Clone + Send + Sync> Sequenced<T> for Sequence<T> {
-    fn sample_at(&self, t: f32) -> T {
+    pub fn sample(&self, t: f32) -> T {
         self.interpolation.interpolate(t, &self.inputs, &self.outputs, self.normalize)
     }
 }
 
-impl<T: Sequenced<[f32; 3]>> Sequenced<Vec3> for T {
-    fn sample_at(&self, t: f32) -> Vec3 {
-        Vec3::from(self.sample_at(t))
+impl<T: InterpolationPrimitive + Clone + Send + Sync> Sequenced<T> for Sequence<T> {
+    fn sample_at(&self, t: f32) -> T {
+        self.sample(t)
     }
 }
 
-impl<T: Sequenced<[f32; 4]>> Sequenced<Quat> for T {
+impl Sequenced<Vec3> for Sequence<[f32; 3]> {
+    fn sample_at(&self, t: f32) -> Vec3 {
+        Vec3::from(self.sample(t))
+    }
+}
+
+impl Sequenced<Quat> for Sequence<[f32; 4]> {
     fn sample_at(&self, t: f32) -> Quat {
-        Quat::from(Vec4::from(self.sample_at(t)))
+        Quat::from(Vec4::from(self.sample(t)))
     }
 }
 
@@ -67,7 +76,7 @@ pub struct TransformSequence<PS: Sequenced<Vec3>, OS: Sequenced<Quat>> {
 
 impl<PS: Sequenced<Vec3>, OS: Sequenced<Quat>> TransformSequence<PS, OS> {
     pub fn new(pos_seq: PS, ori_seq: OS) -> Self {
-        TransformSequence { pos_seq, ori_seq }
+        TransformSequence { pos_seq, ori_seq, }
     }
 }
 

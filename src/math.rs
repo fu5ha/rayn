@@ -11,6 +11,7 @@ pub type Vec2 = vec::repr_c::Vec2<f32>;
 
 pub type Quat = vek::quaternion::repr_c::Quaternion<f32>;
 
+#[derive(Clone, Copy, Debug)]
 pub struct Transform {
     pub position: Vec3,
     pub orientation: Quat,

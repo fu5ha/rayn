@@ -17,7 +17,7 @@ impl<'a> HitRecord<'a> {
 }
 
 pub trait Hitable: Send + Sync {
-    fn hit(&self, ray: &Ray, t_range: ::std::ops::Range<f32>) -> Option<HitRecord>;
+    fn hit(&self, ray: &Ray, time: f32, t_range: ::std::ops::Range<f32>) -> Option<HitRecord>;
 }
 
 pub struct HitableList(Vec<Box<dyn Hitable>>);
@@ -41,11 +41,11 @@ impl ::std::ops::Deref for HitableList {
 }
 
 impl Hitable for HitableList {
-    fn hit(&self, ray: &Ray, t_range: ::std::ops::Range<f32>) -> Option<HitRecord> {
+    fn hit(&self, ray: &Ray, time: f32, t_range: ::std::ops::Range<f32>) -> Option<HitRecord> {
         self.iter()
             .fold((None, t_range.end), |acc, hitable| {
                 let mut closest = acc.1;
-                let hr = hitable.hit(ray, t_range.start..closest);
+                let hr = hitable.hit(ray, time, t_range.start..closest);
                 if let Some(HitRecord { t, .. }) = hr {
                     closest = t;
                 }
