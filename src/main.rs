@@ -13,6 +13,7 @@ mod hitable;
 mod material;
 mod math;
 mod ray;
+mod sdf;
 mod sphere;
 
 use crate::animation::{ Sequence, TransformSequence };
