@@ -36,64 +36,73 @@ lazy_static! {
     static ref WORLD: HitableList = {
         let mut world = HitableList::new();
         world.push(Box::new(Sphere::new(
-            Box::new(TransformSequence::new(
+            TransformSequence::new(
                 Vec3::new(0.0, -200.5, -1.0),
-                Quat::default())),
+                Quat::default()),
             200.0,
             &*GROUND,
         )));
         world.push(Box::new(Sphere::new(
-            Box::new(TransformSequence::new(
+            TransformSequence::new(
                 Vec3::new(0.0, 0.0, -1.0),
-                Quat::default())),
+                Quat::default()),
             0.5,
             &*SILVER,
         )));
         world.push(Box::new(Sphere::new(
-            Box::new(TransformSequence::new(
+            TransformSequence::new(
                 Vec3::new(-1.0, 0.0, -1.0),
-                Quat::default())),
+                Quat::default()),
             0.5,
             &*PINK_DIFFUSE,
         )));
         world.push(Box::new(Sphere::new(
-            Box::new(TransformSequence::new(
+            TransformSequence::new(
                 Vec3::new(1.0, -0.25, -1.0),
-                Quat::default())),
+                Quat::default()),
             0.25,
             &*GOLD,
         )));
         world.push(Box::new(Sphere::new(
-            Box::new(TransformSequence::new(
+            TransformSequence::new(
                 |t: f32| -> Vec3 {
-                    Vec3::new(0.4 - t.cos() * 0.3, -0.375, -0.5 + t.sin() * 0.3)
+                    Vec3::new(
+                        0.4 - (2.0 * t * std::f32::consts::PI).cos() * 0.3,
+                        -0.375,
+                        -0.5 + (2.0 * t * std::f32::consts::PI).sin() * 0.3)
                 },
-                Quat::default())),
+                Quat::default()),
             0.125,
             &*GLASS,
         )));
         world.push(Box::new(Sphere::new(
-            Box::new(TransformSequence::new(
+            TransformSequence::new(
                 |t: f32| -> Vec3 {
-                    Vec3::new(0.2 - t.sin() * 0.15, -0.4, -0.35 - t.cos() * 0.15)
+                    Vec3::new(
+                        0.2 - (2.0 * t * std::f32::consts::PI).sin() * 0.15,
+                        -0.4,
+                        -0.35 - (2.0 * t * std::f32::consts::PI).cos() * 0.15)
                 },
-                Quat::default())),
+                Quat::default()),
             0.1,
             &*GLASS,
         )));
         world.push(Box::new(Sphere::new(
-            Box::new(TransformSequence::new(
+            TransformSequence::new(
                 Vec3::new(-0.25, -0.375, -0.15),
-                Quat::default())),
+                Quat::default()),
             0.125,
             &*GLASS_ROUGH,
         )));
         world.push(Box::new(Sphere::new(
-            Box::new(TransformSequence::new(
+            TransformSequence::new(
                 |t: f32| -> Vec3 {
-                    Vec3::new(-0.5 + t.cos() * 1.5, -0.375, -0.5 + t.sin() * 1.5)
+                    Vec3::new(
+                        -0.5 + (2.0 * t * std::f32::consts::PI).cos() * 1.5,
+                        -0.375,
+                        -0.5 + (2.0 * t * std::f32::consts::PI).sin() * 1.5)
                 },
-                Quat::default())),
+                Quat::default()),
             0.125,
             &*GOLD_ROUGH,
         )));
@@ -131,19 +140,19 @@ fn main() {
     let mut img = image::RgbImage::new(DIMS.0, DIMS.1);
 
     let camera_position_sequence: Sequence<[f32; 3]> = Sequence::new(
-        vec![0.0, 1.0, 1.5, 2.0],
-        vec![[0.0, 0.0, 1.0], [0.0, 0.0, 1.0], [-1.0, 0.0, 1.0], [1.0, 0.0, 1.0]],
+        vec![0.0, 1.0, 2.0, 4.0, 5.0],
+        vec![[0.0, 0.0, 1.0], [0.0, 0.0, 1.0], [-0.5, 0.0, 2.0], [0.5, 0.0, 2.0], [0.0, 0.0, 1.0]],
         minterpolate::InterpolationFunction::Linear,
         false,
     );
     let camera_transform_sequence = TransformSequence::new(camera_position_sequence, Quat::default());
-    let camera = Arc::new(PinholeCamera::new(DIMS.0 as f32 / DIMS.1 as f32, Box::new(camera_transform_sequence)));
+    let camera = Arc::new(PinholeCamera::new(DIMS.0 as f32 / DIMS.1 as f32, camera_transform_sequence));
 
     let mut pixels = vec![Color::zero(); DIMS.0 as usize * DIMS.1 as usize];
 
     let frame_rate = 24;
-    let frame_range = 0..1;
-    let shutter_speed = 1.0 / 48.0;
+    let frame_range = 0..144;
+    let shutter_speed = 1.0 / 24.0;
 
     for frame in frame_range {
         let mutated = AtomicUsize::new(0);
