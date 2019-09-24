@@ -30,9 +30,9 @@ use world::World;
 
 use sdfu::SDF;
 
-const DIMS: (u32, u32) = (1280, 720);
-const SAMPLES: usize = 32;
-const MAX_BOUNCES: usize = 4;
+const DIMS: (u32, u32) = (1920, 1080);
+const SAMPLES: usize = 256;
+const MAX_BOUNCES: usize = 8;
 
 fn setup() -> World {
     let mut materials = MaterialStore::new();
@@ -40,13 +40,20 @@ fn setup() -> World {
     let ground = materials.add_material(Box::new(Dielectric::new(Spectrum::new(0.25, 0.2, 0.35), 0.3)));
     let gold = materials.add_material(Box::new(Metal::new(Spectrum::new(1.0, 0.9, 0.5), 0.0)));
     let gold_rough = materials.add_material(Box::new(Metal::new(Spectrum::new(1.0, 0.9, 0.5), 0.2)));
-    let silver = materials.add_material(Box::new(Metal::new(Spectrum::new(0.9, 0.9, 0.9), 0.05)));
+    let silver = materials.add_material(Box::new(Metal::new(Spectrum::new(0.9, 0.9, 0.9), 0.1)));
     let glass = materials.add_material(Box::new(Refractive::new(Spectrum::new(0.9, 0.9, 0.9), 0.0, 1.2)));
     let glass_rough = materials.add_material(Box::new(Refractive::new(Spectrum::new(0.9, 0.9, 0.9), 0.1, 1.2)));
 
     let mut hitables = HitableStore::new();
+    hitables.push(Box::new(Sphere::new(
+        TransformSequence::new(
+            Vec3::new(0.0, -200.5, -1.0),
+            Quat::default()),
+        200.0,
+        ground,
+    )));
     hitables.push(Box::new(TracedSDF::new(
-        sdfu::Sphere::new(0.5)
+        sdfu::Sphere::new(0.45)
             .subtract(
                 sdfu::Box::new(Vec3::new(0.25, 0.25, 1.5)))
             .union_smooth(
@@ -57,21 +64,14 @@ fn setup() -> World {
                 0.1)
             .subtract(
                 sdfu::Box::new(Vec3::new(0.2, 2.0, 0.2)))
-            .translate(Vec3::new(0.0, 0.0, -1.0)),
+            .translate(Vec3::new(-0.2, 0.0, -1.0)),
         pink_diffuse,
     )));
     hitables.push(Box::new(Sphere::new(
         TransformSequence::new(
-            Vec3::new(0.0, -200.5, -1.0),
+            Vec3::new(-0.2, -0.1, -1.0),
             Quat::default()),
-        200.0,
-        ground,
-    )));
-    hitables.push(Box::new(Sphere::new(
-        TransformSequence::new(
-            Vec3::new(-1.0, 0.0, -1.0),
-            Quat::default()),
-        0.5,
+        0.15,
         silver,
     )));
     hitables.push(Box::new(Sphere::new(
@@ -102,12 +102,13 @@ fn setup() -> World {
     )));
     hitables.push(Box::new(Sphere::new(
         TransformSequence::new(
-            |t: f32| -> Vec3 {
-                Vec3::new(
-                    -0.5 + (2.0 * t * std::f32::consts::PI).cos() * 1.5,
-                    -0.375,
-                    -0.5 + (2.0 * t * std::f32::consts::PI).sin() * 1.5)
-            },
+            Vec3::new(-0.6, -0.375, -0.5),
+            // |t: f32| -> Vec3 {
+            //     Vec3::new(
+            //         -0.5 + (2.0 * t * std::f32::consts::PI).cos() * 1.5,
+            //         -0.375,
+            //         -0.5 - (2.0 * t * std::f32::consts::PI).sin() * 1.5)
+            // },
             Quat::default()),
         0.125,
         gold_rough,
@@ -121,8 +122,6 @@ fn setup() -> World {
 
 fn compute_luminance(world: &World, mut ray: Ray, time: f32, rng: &mut ThreadRng) -> Spectrum {
     let mut luminance = Spectrum::zero();
-    let mut bsdf_over_pdf = Spectrum::one();
-    let mut prev_throughput = Spectrum::one();
     let mut throughput = Spectrum::one();
     for bounce in 0.. {
         if let Some(intersection) = world.hitables.hit(&ray, time, 0.001..1000.0) {
@@ -138,9 +137,7 @@ fn compute_luminance(world: &World, mut ray: Ray, time: f32, rng: &mut ThreadRng
                 if se.pdf == 0.0 || se.f.is_black() {
                     break;
                 }
-                prev_throughput = throughput;
-                bsdf_over_pdf = se.f / se.pdf;
-                throughput *= bsdf_over_pdf * se.wi.dot(intersection.normal).abs();
+                throughput *= se.f / se.pdf * se.wi.dot(intersection.normal).abs();
                 ray = Ray::new(intersection.point, se.wi);
             } else {
                 break;
@@ -149,7 +146,7 @@ fn compute_luminance(world: &World, mut ray: Ray, time: f32, rng: &mut ThreadRng
             let dir = ray.dir();
             let t = 0.5 * (dir.y + 1.0);
 
-            luminance += prev_throughput * bsdf_over_pdf * Spectrum(Vec3::lerp(Vec3::one(), Vec3::new(0.5, 0.7, 1.0), t));
+            luminance += throughput * Spectrum(Vec3::lerp(Vec3::one(), Vec3::new(0.5, 0.7, 1.0), t));
             break;
         }
 
@@ -186,7 +183,7 @@ fn main() {
     let mut pixels = vec![Spectrum::zero(); DIMS.0 as usize * DIMS.1 as usize];
 
     let frame_rate = 24;
-    let frame_range = 1..2;
+    let frame_range = 3..4;
     let shutter_speed = 1.0 / 24.0;
 
     for frame in frame_range {

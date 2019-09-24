@@ -57,7 +57,8 @@ impl Material for Dielectric {
         let (attenuation, specular, bounce) = if rng.gen::<f32>() > fresnel {
             (self.albedo, false, norm + Vec3::rand(rng))
         } else {
-            (Spectrum::new(1.0, 1.0, 1.0), true, ray.dir().reflected(norm) + (Vec3::rand(rng) * self.roughness))
+            let bounce = ray.dir().reflected(norm) + (Vec3::rand(rng) * self.roughness);
+            (Spectrum::one() / bounce.dot(norm).abs(), true, bounce)
         };
         Some(ScatteringEvent {
             wi: bounce.normalized(),
@@ -81,9 +82,10 @@ impl Metal {
 
 impl Material for Metal {
     fn scatter(&self, ray: Ray, intersection: Intersection, rng: &mut ThreadRng) -> Option<ScatteringEvent> {
-        let bounce = ray.dir().reflected(intersection.normal) + Vec3::rand(rng) * self.roughness;
-        let cos = (*ray.dir() * -1.0).dot(intersection.normal).abs();
-        let attenuation = f_schlick_c(cos, self.f0);
+        let reflected = ray.dir().reflected(intersection.normal);
+        let bounce = reflected + Vec3::rand(rng) * self.roughness;
+        let cos = bounce.dot(intersection.normal).abs();
+        let attenuation = f_schlick_c(cos, self.f0) / cos;
         Some(ScatteringEvent {
             wi: bounce.normalized(),
             f: attenuation,
@@ -133,7 +135,8 @@ impl Material for Refractive {
             }
             (self.refract_color, refract, false)
         } else {
-            (Spectrum::one(), ray.dir().reflected(norm) + (Vec3::rand(rng) * self.roughness), true)
+            let bounce = ray.dir().reflected(norm) + (Vec3::rand(rng) * self.roughness);
+            (Spectrum::one() / bounce.dot(norm).abs(), bounce, true)
         };
 
         Some(ScatteringEvent {
