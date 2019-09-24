@@ -25,6 +25,6 @@ impl<TR: Sequenced<Transform>> PinholeCamera<TR> {
 impl<TR: Sequenced<Transform>> Camera for PinholeCamera<TR> {
     fn get_ray(&self, uv: Vec2, time: f32) -> Ray {
         let transform = self.transform_sequence.sample_at(time);
-        Ray::new(transform.position, transform.orientation * (self.lower_left + self.full_size * uv).normalized(), 1.0)
+        Ray::new(transform.position, transform.orientation * (self.lower_left + self.full_size * uv).normalized())
     }
 }

@@ -1,17 +1,17 @@
 use crate::animation::Sequenced;
-use crate::hitable::{HitRecord, Hitable};
-use crate::material::Material;
+use crate::hitable::{ Intersection, Hitable };
+use crate::material::{ MaterialHandle };
 use crate::math::{ Transform };
 use crate::ray::Ray;
 
-pub struct Sphere<'a, TR: Sequenced<Transform>> {
+pub struct Sphere<TR: Sequenced<Transform>> {
     transform_seq: TR,
     radius: f32,
-    material: &'a dyn Material,
+    material: MaterialHandle,
 }
 
-impl<'a, TR: Sequenced<Transform>> Sphere<'a, TR> {
-    pub fn new(transform_seq: TR, radius: f32, material: &'a dyn Material) -> Self {
+impl<TR: Sequenced<Transform>> Sphere<TR> {
+    pub fn new(transform_seq: TR, radius: f32, material: MaterialHandle) -> Self {
         Sphere {
             transform_seq,
             radius,
@@ -20,8 +20,8 @@ impl<'a, TR: Sequenced<Transform>> Sphere<'a, TR> {
     }
 }
 
-impl<'a, TR: Sequenced<Transform>> Hitable for Sphere<'a, TR> {
-    fn hit(&self, ray: &Ray, time: f32, t_range: ::std::ops::Range<f32>) -> Option<HitRecord> {
+impl<'a, TR: Sequenced<Transform>> Hitable for Sphere<TR> {
+    fn hit(&self, ray: &Ray, time: f32, t_range: ::std::ops::Range<f32>) -> Option<Intersection> {
         let transform = self.transform_seq.sample_at(time);
         let origin = transform.position;
         let oc = ray.origin() - origin;
@@ -37,14 +37,14 @@ impl<'a, TR: Sequenced<Transform>> Hitable for Sphere<'a, TR> {
                 let point = ray.point_at(t);
                 let mut offset = point - origin;
                 offset /= self.radius;
-                return Some(HitRecord::new(t, point, offset, self.material));
+                return Some(Intersection::new(t, point, offset, self.material));
             }
             let t = (-b + desc_sqrt) / (2.0 * a);
             if t > t_range.start && t < t_range.end {
                 let point = ray.point_at(t);
                 let mut offset = point - origin;
                 offset /= self.radius;
-                return Some(HitRecord::new(t, point, offset, self.material));
+                return Some(Intersection::new(t, point, offset, self.material));
             }
         }
         None

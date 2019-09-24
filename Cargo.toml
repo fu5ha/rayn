@@ -10,5 +10,5 @@ vek = "0.9"
 image = "0.22"
 rand = "0.7"
 rayon = "1.2"
-lazy_static = "1.2"
 minterpolate = "0.4"
+sdfu = { path = "../sdfu", features = ["vek"] }

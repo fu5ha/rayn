@@ -3,7 +3,7 @@ use std::f32::consts::PI;
 use rand::prelude::*;
 use vek::vec;
 
-use crate::color::Color;
+use crate::spectrum::Spectrum;
 
 pub type Vec4 = vec::repr_c::Vec4<f32>;
 pub type Vec3 = vec::repr_c::Vec3<f32>;
@@ -39,10 +39,10 @@ pub fn f_schlick(cos: f32, f0: f32) -> f32 {
     f0 + (1.0 - f0) * (1.0 - cos).powi(5)
 }
 
-pub fn f_schlick_c(cos: f32, f0: Color) -> Color {
+pub fn f_schlick_c(cos: f32, f0: Spectrum) -> Spectrum {
     let f0 = f0.0;
-    let out_v = f0 + (Vec3::from(1.0) - f0) * (1.0 - cos).powi(5);
-    Color(out_v)
+    let out_v = f0 + (Vec3::one() - f0) * (1.0 - cos).powi(5);
+    Spectrum(out_v)
 }
 
 pub fn saturate(v: f32) -> f32 {

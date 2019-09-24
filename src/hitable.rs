@@ -1,30 +1,31 @@
-use crate::material::Material;
+use crate::material::{ MaterialHandle };
 use crate::math::Vec3;
 use crate::ray::Ray;
 
-#[derive(Clone)]
-pub struct HitRecord<'a> {
+#[derive(Clone, Copy, Debug)]
+pub struct Intersection {
     pub t: f32,
     pub point: Vec3,
     pub normal: Vec3,
-    pub material: &'a dyn Material,
+    pub material: MaterialHandle,
+    // pub eta: f32,
 }
 
-impl<'a> HitRecord<'a> {
-    pub fn new(t: f32, point: Vec3, normal: Vec3, material: &'a dyn Material) -> Self {
-        HitRecord { t, point, normal, material }
+impl Intersection {
+    pub fn new(t: f32, point: Vec3, normal: Vec3, material: MaterialHandle) -> Self {
+        Intersection { t, point, normal, material }
     }
 }
 
 pub trait Hitable: Send + Sync {
-    fn hit(&self, ray: &Ray, time: f32, t_range: ::std::ops::Range<f32>) -> Option<HitRecord>;
+    fn hit(&self, ray: &Ray, time: f32, t_range: ::std::ops::Range<f32>) -> Option<Intersection>;
 }
 
-pub struct HitableList(Vec<Box<dyn Hitable>>);
+pub struct HitableStore(Vec<Box<dyn Hitable>>);
 
-impl HitableList {
+impl HitableStore {
     pub fn new() -> Self {
-        HitableList(Vec::new())
+        HitableStore(Vec::new())
     }
 
     pub fn push(&mut self, hitable: Box<dyn Hitable>) {
@@ -32,7 +33,7 @@ impl HitableList {
     }
 }
 
-impl ::std::ops::Deref for HitableList {
+impl ::std::ops::Deref for HitableStore {
     type Target = Vec<Box<dyn Hitable>>;
 
     fn deref(&self) -> &Vec<Box<dyn Hitable>> {
@@ -40,13 +41,13 @@ impl ::std::ops::Deref for HitableList {
     }
 }
 
-impl Hitable for HitableList {
-    fn hit(&self, ray: &Ray, time: f32, t_range: ::std::ops::Range<f32>) -> Option<HitRecord> {
+impl Hitable for HitableStore {
+    fn hit(&self, ray: &Ray, time: f32, t_range: ::std::ops::Range<f32>) -> Option<Intersection> {
         self.iter()
             .fold((None, t_range.end), |acc, hitable| {
                 let mut closest = acc.1;
                 let hr = hitable.hit(ray, time, t_range.start..closest);
-                if let Some(HitRecord { t, .. }) = hr {
+                if let Some(Intersection { t, .. }) = hr {
                     closest = t;
                 }
                 let hr = if hr.is_some() { hr } else { acc.0 };
