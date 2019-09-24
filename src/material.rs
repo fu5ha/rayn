@@ -2,11 +2,11 @@ use rand::prelude::*;
 
 use crate::spectrum::Spectrum;
 use crate::hitable::Intersection;
-use crate::math::{f0_from_ior, f_schlick, f_schlick_c, saturate, RandomInit, Vec3};
+use crate::math::{f0_from_ior, f_schlick, f_schlick_c, saturate, OrthonormalBasis, RandomSample, Vec3};
 use crate::ray::Ray;
 
 pub trait Material: Send + Sync {
-    fn scatter(&self, ray: Ray, intersection: Intersection, rng: &mut ThreadRng) -> Option<ScatteringEvent>;
+    fn scatter(&self, ray: Ray, intersection: &mut Intersection, rng: &mut ThreadRng) -> Option<ScatteringEvent>;
     fn le(&self, _wo: Vec3) -> Spectrum { Spectrum::zero() }
     fn internal_ior(&self) -> f32 { 1.0 }
 }
@@ -50,20 +50,30 @@ impl Dielectric {
 }
 
 impl Material for Dielectric {
-    fn scatter(&self, ray: Ray, intersection: Intersection, rng: &mut ThreadRng) -> Option<ScatteringEvent> {
+    fn scatter(&self, ray: Ray, intersection: &mut Intersection, rng: &mut ThreadRng) -> Option<ScatteringEvent> {
         let norm = intersection.normal;
         let cos = norm.dot(*ray.dir() * -1.0).abs();
         let fresnel = f_schlick(cos, 0.04);
-        let (attenuation, specular, bounce) = if rng.gen::<f32>() > fresnel {
-            (self.albedo, false, norm + Vec3::rand(rng))
+        let (f, pdf, specular, bounce) = if rng.gen::<f32>() > fresnel {
+            // Importance sample with cosine weighted distribution
+            let sample = Vec3::cosine_weighted_in_hemisphere(rng, 1.0);
+            let bounce = intersection.basis() * sample;
+            let pdf = sample.dot(Vec3::unit_z()) / std::f32::consts::PI;
+            let f = self.albedo / std::f32::consts::PI;
+            (f, pdf, false, bounce)
         } else {
-            let bounce = ray.dir().reflected(norm) + (Vec3::rand(rng) * self.roughness);
-            (Spectrum::one() / bounce.dot(norm).abs(), true, bounce)
+            let reflection = ray.dir().reflected(norm);
+            let sample = Vec3::cosine_weighted_in_hemisphere(rng, self.roughness);
+            let basis = reflection.get_orthonormal_basis();
+            let bounce = basis * sample;
+            let pdf = sample.dot(Vec3::unit_z()) / std::f32::consts::PI;
+            let f = Spectrum::one() / bounce.dot(norm).abs() / std::f32::consts::PI;
+            (f, pdf, true, bounce)
         };
         Some(ScatteringEvent {
             wi: bounce.normalized(),
-            f: attenuation,
-            pdf: 1.0,
+            f,
+            pdf,
             specular,
         })
     }
@@ -81,15 +91,18 @@ impl Metal {
 }
 
 impl Material for Metal {
-    fn scatter(&self, ray: Ray, intersection: Intersection, rng: &mut ThreadRng) -> Option<ScatteringEvent> {
-        let reflected = ray.dir().reflected(intersection.normal);
-        let bounce = reflected + Vec3::rand(rng) * self.roughness;
+    fn scatter(&self, ray: Ray, intersection: &mut Intersection, rng: &mut ThreadRng) -> Option<ScatteringEvent> {
+        let sample = Vec3::cosine_weighted_in_hemisphere(rng, self.roughness);
+        let reflection = ray.dir().reflected(intersection.normal);
+        let basis = reflection.get_orthonormal_basis();
+        let bounce = basis * sample;
+        let pdf = sample.dot(Vec3::unit_z()) / std::f32::consts::PI;
         let cos = bounce.dot(intersection.normal).abs();
-        let attenuation = f_schlick_c(cos, self.f0) / cos;
+        let f = f_schlick_c(cos, self.f0) / cos / std::f32::consts::PI;
         Some(ScatteringEvent {
             wi: bounce.normalized(),
-            f: attenuation,
-            pdf: 1.0,
+            f,
+            pdf,
             specular: true,
         })
     }
@@ -108,13 +121,12 @@ impl Refractive {
 }
 
 impl Material for Refractive {
-    fn scatter(&self, ray: Ray, intersection: Intersection, rng: &mut ThreadRng) -> Option<ScatteringEvent> {
+    fn scatter(&self, ray: Ray, intersection: &mut Intersection, rng: &mut ThreadRng) -> Option<ScatteringEvent> {
         let norm = intersection.normal;
         let (refract_norm, eta, cos) = if ray.dir().dot(norm) > 0.0 {
             (
                 norm * -1.0,
                 self.ior,
-                // 1.0 / intersection.eta,
                 norm.dot(*ray.dir()),
             )
         } else {
@@ -126,24 +138,37 @@ impl Material for Refractive {
         };
         let f0 = f0_from_ior(self.ior);
         let fresnel = f_schlick(saturate(cos), f0);
-        // println!("{}", fresnel);
-        let (attenuation, bounce, specular) = if rng.gen::<f32>() > fresnel {
-            let refract = ray.dir().refracted(refract_norm, eta)
-                + (Vec3::rand(rng) * self.roughness);
-            if refract == Vec3::zero() {
-                return None;
+        let sample = Vec3::cosine_weighted_in_hemisphere(rng, self.roughness);
+        let (f, pdf, bounce) = if rng.gen::<f32>() > fresnel {
+            let refraction = ray.dir().refracted(refract_norm, eta);
+            if refraction != Vec3::zero() {
+                let basis = refraction.get_orthonormal_basis();
+                let bounce = basis * sample;
+                let pdf = sample.dot(Vec3::unit_z()) / std::f32::consts::PI;
+                let f = self.refract_color / bounce.dot(norm).abs() / std::f32::consts::PI;
+                (f, pdf, bounce)
+            } else {
+                // Total internal reflection
+                reflect_part(ray, sample, norm)
             }
-            (self.refract_color, refract, false)
         } else {
-            let bounce = ray.dir().reflected(norm) + (Vec3::rand(rng) * self.roughness);
-            (Spectrum::one() / bounce.dot(norm).abs(), bounce, true)
+            reflect_part(ray, sample, norm)
         };
 
         Some(ScatteringEvent {
             wi: bounce.normalized(),
-            f: attenuation,
-            pdf: 1.0,
-            specular
+            f,
+            pdf,
+            specular: true,
         })
     }
+}
+
+fn reflect_part(ray: Ray, sample: Vec3, norm: Vec3) -> (Spectrum, f32, Vec3) {
+    let reflection = ray.dir().reflected(norm);
+    let basis = reflection.get_orthonormal_basis();
+    let bounce = basis * sample;
+    let pdf = sample.dot(Vec3::unit_z()) / std::f32::consts::PI;
+    let f = Spectrum::one() / bounce.dot(norm).abs() / std::f32::consts::PI;
+    (f, pdf, bounce)
 }

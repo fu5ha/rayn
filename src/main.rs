@@ -30,19 +30,19 @@ use world::World;
 
 use sdfu::SDF;
 
-const DIMS: (u32, u32) = (1920, 1080);
-const SAMPLES: usize = 256;
-const MAX_BOUNCES: usize = 8;
+const DIMS: (u32, u32) = (1280, 720);
+const SAMPLES: usize = 128;
+const MAX_BOUNCES: usize = 6;
 
 fn setup() -> World {
     let mut materials = MaterialStore::new();
     let pink_diffuse = materials.add_material(Box::new(Dielectric::new(Spectrum::new(0.9, 0.35, 0.55), 0.0)));
     let ground = materials.add_material(Box::new(Dielectric::new(Spectrum::new(0.25, 0.2, 0.35), 0.3)));
     let gold = materials.add_material(Box::new(Metal::new(Spectrum::new(1.0, 0.9, 0.5), 0.0)));
-    let gold_rough = materials.add_material(Box::new(Metal::new(Spectrum::new(1.0, 0.9, 0.5), 0.2)));
+    let gold_rough = materials.add_material(Box::new(Metal::new(Spectrum::new(1.0, 0.9, 0.5), 0.5)));
     let silver = materials.add_material(Box::new(Metal::new(Spectrum::new(0.9, 0.9, 0.9), 0.1)));
-    let glass = materials.add_material(Box::new(Refractive::new(Spectrum::new(0.9, 0.9, 0.9), 0.0, 1.2)));
-    let glass_rough = materials.add_material(Box::new(Refractive::new(Spectrum::new(0.9, 0.9, 0.9), 0.1, 1.2)));
+    let glass = materials.add_material(Box::new(Refractive::new(Spectrum::new(0.9, 0.9, 0.9), 0.0, 1.5)));
+    let glass_rough = materials.add_material(Box::new(Refractive::new(Spectrum::new(0.9, 0.9, 0.9), 0.5, 1.5)));
 
     let mut hitables = HitableStore::new();
     hitables.push(Box::new(Sphere::new(
@@ -62,6 +62,12 @@ fn setup() -> World {
             .union_smooth(
                 sdfu::Sphere::new(0.3).translate(Vec3::new(-0.3, 0.3, 0.0)),
                 0.1)
+            .subtract(
+                sdfu::Box::new(Vec3::new(0.125, 0.125, 1.5)).translate(Vec3::new(-0.3, 0.3, 0.0)))
+            .subtract(
+                sdfu::Box::new(Vec3::new(0.125, 0.125, 1.5)).translate(Vec3::new(0.3, 0.3, 0.0)))
+            .subtract(
+                sdfu::Box::new(Vec3::new(1.5, 0.1, 0.1)).translate(Vec3::new(0.0, 0.3, 0.0)))
             .subtract(
                 sdfu::Box::new(Vec3::new(0.2, 2.0, 0.2)))
             .translate(Vec3::new(-0.2, 0.0, -1.0)),
@@ -124,14 +130,14 @@ fn compute_luminance(world: &World, mut ray: Ray, time: f32, rng: &mut ThreadRng
     let mut luminance = Spectrum::zero();
     let mut throughput = Spectrum::one();
     for bounce in 0.. {
-        if let Some(intersection) = world.hitables.hit(&ray, time, 0.001..1000.0) {
+        if let Some(mut intersection) = world.hitables.hit(&ray, time, 0.001..1000.0) {
             let material = world.materials.get(intersection.material);
 
             let inv_ray_dir = -*ray.dir();
 
             luminance += material.le(inv_ray_dir) * throughput;
 
-            let scatter = material.scatter(ray, intersection, rng);
+            let scatter = material.scatter(ray, &mut intersection, rng);
 
             if let Some(se) = scatter {
                 if se.pdf == 0.0 || se.f.is_black() {

@@ -1,5 +1,5 @@
 use crate::material::{ MaterialHandle };
-use crate::math::Vec3;
+use crate::math::{ Mat3, Vec3, OrthonormalBasis };
 use crate::ray::Ray;
 
 #[derive(Clone, Copy, Debug)]
@@ -7,13 +7,24 @@ pub struct Intersection {
     pub t: f32,
     pub point: Vec3,
     pub normal: Vec3,
+    pub basis: Option<Mat3>,
     pub material: MaterialHandle,
     // pub eta: f32,
 }
 
 impl Intersection {
     pub fn new(t: f32, point: Vec3, normal: Vec3, material: MaterialHandle) -> Self {
-        Intersection { t, point, normal, material }
+        Intersection { t, point, normal, basis: None, material }
+    }
+
+    pub fn basis(&mut self) -> Mat3 {
+        if let Some(basis) = self.basis {
+            basis
+        } else {
+            let basis = self.normal.get_orthonormal_basis();
+            self.basis = Some(basis);
+            basis
+        }
     }
 }
 

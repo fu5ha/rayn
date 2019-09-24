@@ -379,7 +379,7 @@ dependencies = [
  "minterpolate 0.4.0 (registry+https://github.com/rust-lang/crates.io-index)",
  "rand 0.7.2 (registry+https://github.com/rust-lang/crates.io-index)",
  "rayon 1.2.0 (registry+https://github.com/rust-lang/crates.io-index)",
- "sdfu 0.0.1",
+ "sdfu 0.1.1",
  "vek 0.9.4 (registry+https://github.com/rust-lang/crates.io-index)",
 ]
 
@@ -425,7 +425,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 
 [[package]]
 name = "sdfu"
-version = "0.0.1"
+version = "0.1.1"
 dependencies = [
  "vek 0.9.4 (registry+https://github.com/rust-lang/crates.io-index)",
 ]
