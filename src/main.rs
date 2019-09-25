@@ -19,7 +19,7 @@ mod world;
 
 use animation::{ Sequence, TransformSequence };
 use camera::{ Camera, PinholeCamera };
-use spectrum::Spectrum;
+use spectrum::{ IsSpectrum, RGBSpectrum };
 use hitable::{Hitable, HitableStore};
 use material::{Dielectric, MaterialStore, Metal, Refractive};
 use math::{ Vec2, Vec3, Quat };
@@ -34,7 +34,9 @@ const DIMS: (u32, u32) = (1280, 720);
 const SAMPLES: usize = 128;
 const MAX_BOUNCES: usize = 6;
 
-fn setup() -> World {
+type Spectrum = RGBSpectrum;
+
+fn setup() -> World<Spectrum> {
     let mut materials = MaterialStore::new();
     let pink_diffuse = materials.add_material(Box::new(Dielectric::new(Spectrum::new(0.9, 0.35, 0.55), 0.0)));
     let ground = materials.add_material(Box::new(Dielectric::new(Spectrum::new(0.25, 0.2, 0.35), 0.3)));
@@ -126,7 +128,7 @@ fn setup() -> World {
     }
 }
 
-fn compute_luminance(world: &World, mut ray: Ray, time: f32, rng: &mut ThreadRng) -> Spectrum {
+fn compute_luminance(world: &World<Spectrum>, mut ray: Ray, time: f32, rng: &mut ThreadRng) -> Spectrum {
     let mut luminance = Spectrum::zero();
     let mut throughput = Spectrum::one();
     for bounce in 0.. {
@@ -152,7 +154,7 @@ fn compute_luminance(world: &World, mut ray: Ray, time: f32, rng: &mut ThreadRng
             let dir = ray.dir();
             let t = 0.5 * (dir.y + 1.0);
 
-            luminance += throughput * Spectrum(Vec3::lerp(Vec3::one(), Vec3::new(0.5, 0.7, 1.0), t));
+            luminance += throughput * RGBSpectrum(Vec3::lerp(Vec3::one(), Vec3::new(0.5, 0.7, 1.0), t));
             break;
         }
 

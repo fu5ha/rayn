@@ -1,19 +1,19 @@
 use rand::prelude::*;
 
-use crate::spectrum::Spectrum;
+use crate::spectrum::IsSpectrum;
 use crate::hitable::Intersection;
 use crate::math::{f0_from_ior, f_schlick, f_schlick_c, saturate, OrthonormalBasis, RandomSample, Vec3};
 use crate::ray::Ray;
 
-pub trait Material: Send + Sync {
-    fn scatter(&self, ray: Ray, intersection: &mut Intersection, rng: &mut ThreadRng) -> Option<ScatteringEvent>;
-    fn le(&self, _wo: Vec3) -> Spectrum { Spectrum::zero() }
+pub trait Material<S: IsSpectrum>: Send + Sync {
+    fn scatter(&self, ray: Ray, intersection: &mut Intersection, rng: &mut ThreadRng) -> Option<ScatteringEvent<S>>;
+    fn le(&self, _wo: Vec3) -> S { IsSpectrum::zero() }
     fn internal_ior(&self) -> f32 { 1.0 }
 }
 
-pub struct ScatteringEvent {
+pub struct ScatteringEvent<S> {
     pub wi: Vec3,
-    pub f: Spectrum,
+    pub f: S,
     pub pdf: f32,
     pub specular: bool,
 }
@@ -21,36 +21,36 @@ pub struct ScatteringEvent {
 #[derive(Clone, Copy, Debug)]
 pub struct MaterialHandle(usize);
 
-pub struct MaterialStore(Vec<Box<dyn Material>>);
+pub struct MaterialStore<S>(Vec<Box<dyn Material<S>>>);
 
-impl MaterialStore {
+impl<S: IsSpectrum> MaterialStore<S> {
     pub fn new() -> Self {
         MaterialStore(Vec::new())
     }
 
-    pub fn add_material(&mut self, material: Box<dyn Material>) -> MaterialHandle {
+    pub fn add_material(&mut self, material: Box<dyn Material<S>>) -> MaterialHandle {
         self.0.push(material);
         MaterialHandle(self.0.len() - 1)
     }
 
-    pub fn get(&self, handle: MaterialHandle) -> &dyn Material {
+    pub fn get(&self, handle: MaterialHandle) -> &dyn Material<S> {
         self.0.get(handle.0).map(|b| b.as_ref()).unwrap()
     }
 }
 
-pub struct Dielectric {
-    albedo: Spectrum,
+pub struct Dielectric<S> {
+    albedo: S,
     roughness: f32,
 }
 
-impl Dielectric {
-    pub fn new(albedo: Spectrum, roughness: f32) -> Self {
+impl<S> Dielectric<S> {
+    pub fn new(albedo: S, roughness: f32) -> Self {
         Dielectric { albedo, roughness }
     }
 }
 
-impl Material for Dielectric {
-    fn scatter(&self, ray: Ray, intersection: &mut Intersection, rng: &mut ThreadRng) -> Option<ScatteringEvent> {
+impl<S: IsSpectrum> Material<S> for Dielectric<S> {
+    fn scatter(&self, ray: Ray, intersection: &mut Intersection, rng: &mut ThreadRng) -> Option<ScatteringEvent<S>> {
         let norm = intersection.normal;
         let cos = norm.dot(*ray.dir() * -1.0).abs();
         let fresnel = f_schlick(cos, 0.04);
@@ -67,7 +67,7 @@ impl Material for Dielectric {
             let basis = reflection.get_orthonormal_basis();
             let bounce = basis * sample;
             let pdf = sample.dot(Vec3::unit_z()) / std::f32::consts::PI;
-            let f = Spectrum::one() / bounce.dot(norm).abs() / std::f32::consts::PI;
+            let f = S::one() / bounce.dot(norm).abs() / std::f32::consts::PI;
             (f, pdf, true, bounce)
         };
         Some(ScatteringEvent {
@@ -79,19 +79,19 @@ impl Material for Dielectric {
     }
 }
 
-pub struct Metal {
-    f0: Spectrum,
+pub struct Metal<S> {
+    f0: S,
     roughness: f32,
 }
 
-impl Metal {
-    pub fn new(f0: Spectrum, roughness: f32) -> Self {
+impl<S> Metal<S> {
+    pub fn new(f0: S, roughness: f32) -> Self {
         Metal { f0, roughness }
     }
 }
 
-impl Material for Metal {
-    fn scatter(&self, ray: Ray, intersection: &mut Intersection, rng: &mut ThreadRng) -> Option<ScatteringEvent> {
+impl<S: IsSpectrum> Material<S> for Metal<S> {
+    fn scatter(&self, ray: Ray, intersection: &mut Intersection, rng: &mut ThreadRng) -> Option<ScatteringEvent<S>> {
         let sample = Vec3::cosine_weighted_in_hemisphere(rng, self.roughness);
         let reflection = ray.dir().reflected(intersection.normal);
         let basis = reflection.get_orthonormal_basis();
@@ -108,20 +108,20 @@ impl Material for Metal {
     }
 }
 
-pub struct Refractive {
-    refract_color: Spectrum,
+pub struct Refractive<S> {
+    refract_color: S,
     ior: f32,
     roughness: f32,
 }
 
-impl Refractive {
-    pub fn new(refract_color: Spectrum, roughness: f32, ior: f32) -> Self {
+impl<S> Refractive<S> {
+    pub fn new(refract_color: S, roughness: f32, ior: f32) -> Self {
         Refractive { refract_color, roughness, ior }
     }
 }
 
-impl Material for Refractive {
-    fn scatter(&self, ray: Ray, intersection: &mut Intersection, rng: &mut ThreadRng) -> Option<ScatteringEvent> {
+impl<S: IsSpectrum> Material<S> for Refractive<S> {
+    fn scatter(&self, ray: Ray, intersection: &mut Intersection, rng: &mut ThreadRng) -> Option<ScatteringEvent<S>> {
         let norm = intersection.normal;
         let (refract_norm, eta, cos) = if ray.dir().dot(norm) > 0.0 {
             (
@@ -164,11 +164,11 @@ impl Material for Refractive {
     }
 }
 
-fn reflect_part(ray: Ray, sample: Vec3, norm: Vec3) -> (Spectrum, f32, Vec3) {
+fn reflect_part<S: IsSpectrum>(ray: Ray, sample: Vec3, norm: Vec3) -> (S, f32, Vec3) {
     let reflection = ray.dir().reflected(norm);
     let basis = reflection.get_orthonormal_basis();
     let bounce = basis * sample;
     let pdf = sample.dot(Vec3::unit_z()) / std::f32::consts::PI;
-    let f = Spectrum::one() / bounce.dot(norm).abs() / std::f32::consts::PI;
+    let f = S::one() / bounce.dot(norm).abs() / std::f32::consts::PI;
     (f, pdf, bounce)
 }
