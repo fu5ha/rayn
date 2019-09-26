@@ -13,3 +13,5 @@ rayon = "1.2"
 minterpolate = "0.4"
 # sdfu = { path = "../sdfu", features = ["vek"] }
 sdfu = { version = "0.1", features = ["vek"] }
+num_cpus = "1.10"
+dynamic-arena = "0.1"

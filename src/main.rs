@@ -2,9 +2,13 @@ use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::Arc;
 use std::time::Instant;
 
+use dynamic_arena::{ DynamicArena, NonSend };
+
 use rand::distributions::Uniform;
 use rand::prelude::*;
 use rayon::prelude::*;
+
+use sdfu::SDF;
 
 mod animation;
 mod camera;
@@ -21,24 +25,31 @@ use animation::{ Sequence, TransformSequence };
 use camera::{ Camera, PinholeCamera };
 use spectrum::{ IsSpectrum, RGBSpectrum };
 use hitable::{Hitable, HitableStore};
-use material::{Dielectric, MaterialStore, Metal, Refractive};
+use material::{Dielectric, Emissive, Checkerboard3d, MaterialStore, Metal, Refractive};
 use math::{ Vec2, Vec3, Quat };
 use ray::Ray;
 use sdf::TracedSDF;
 use sphere::Sphere;
 use world::World;
 
-use sdfu::SDF;
-
 const DIMS: (u32, u32) = (1280, 720);
-const SAMPLES: usize = 128;
-const MAX_BOUNCES: usize = 6;
+const CHUNK_SIZE: usize = 32 * 32;
+const SAMPLES: usize = 32;
+const MAX_BOUNCES: usize = 8;
 
 type Spectrum = RGBSpectrum;
+const NUM_PIXELS: usize = (DIMS.0 * DIMS.1) as usize;
 
 fn setup() -> World<Spectrum> {
+    let white_emissive = Emissive::new(Spectrum::new(1.0, 1.0, 1.5), Dielectric::new(Spectrum::new(0.5, 0.5, 0.5), 0.0));
+    let checkerboard = Checkerboard3d::new(
+        Vec3::new(0.15, 0.15, 0.15),
+        Dielectric::new(Spectrum::new(0.9, 0.35, 0.55), 0.0),
+        Refractive::new(Spectrum::new(0.9, 0.9, 0.9), 0.0, 1.5));
+
     let mut materials = MaterialStore::new();
-    let pink_diffuse = materials.add_material(Box::new(Dielectric::new(Spectrum::new(0.9, 0.35, 0.55), 0.0)));
+    let checkerboard = materials.add_material(Box::new(checkerboard));
+    let white_emissive = materials.add_material(Box::new(white_emissive));
     let ground = materials.add_material(Box::new(Dielectric::new(Spectrum::new(0.25, 0.2, 0.35), 0.3)));
     let gold = materials.add_material(Box::new(Metal::new(Spectrum::new(1.0, 0.9, 0.5), 0.0)));
     let gold_rough = materials.add_material(Box::new(Metal::new(Spectrum::new(1.0, 0.9, 0.5), 0.5)));
@@ -46,7 +57,7 @@ fn setup() -> World<Spectrum> {
     let glass = materials.add_material(Box::new(Refractive::new(Spectrum::new(0.9, 0.9, 0.9), 0.0, 1.5)));
     let glass_rough = materials.add_material(Box::new(Refractive::new(Spectrum::new(0.9, 0.9, 0.9), 0.5, 1.5)));
 
-    let mut hitables = HitableStore::new();
+    let mut hitables = HitableStore::<Spectrum>::new();
     hitables.push(Box::new(Sphere::new(
         TransformSequence::new(
             Vec3::new(0.0, -200.5, -1.0),
@@ -73,14 +84,14 @@ fn setup() -> World<Spectrum> {
             .subtract(
                 sdfu::Box::new(Vec3::new(0.2, 2.0, 0.2)))
             .translate(Vec3::new(-0.2, 0.0, -1.0)),
-        pink_diffuse,
+        checkerboard,
     )));
     hitables.push(Box::new(Sphere::new(
         TransformSequence::new(
             Vec3::new(-0.2, -0.1, -1.0),
             Quat::default()),
         0.15,
-        silver,
+        white_emissive,
     )));
     hitables.push(Box::new(Sphere::new(
         TransformSequence::new(
@@ -131,22 +142,25 @@ fn setup() -> World<Spectrum> {
 fn compute_luminance(world: &World<Spectrum>, mut ray: Ray, time: f32, rng: &mut ThreadRng) -> Spectrum {
     let mut luminance = Spectrum::zero();
     let mut throughput = Spectrum::one();
+    let arena = DynamicArena::<'_, NonSend>::new_bounded();
     for bounce in 0.. {
         if let Some(mut intersection) = world.hitables.hit(&ray, time, 0.001..1000.0) {
+            let wi = *ray.dir();
             let material = world.materials.get(intersection.material);
 
-            let inv_ray_dir = -*ray.dir();
+            material.setup_scattering_functions(&mut intersection, &arena);
+            let bsdf = unsafe { intersection.bsdf.assume_init() };
 
-            luminance += material.le(inv_ray_dir) * throughput;
+            luminance += bsdf.le(-wi, &mut intersection) * throughput;
 
-            let scatter = material.scatter(ray, &mut intersection, rng);
+            let scattering_event = bsdf.scatter(wi, &mut intersection, rng);
 
-            if let Some(se) = scatter {
+            if let Some(se) = scattering_event {
                 if se.pdf == 0.0 || se.f.is_black() {
                     break;
                 }
                 throughput *= se.f / se.pdf * se.wi.dot(intersection.normal).abs();
-                ray = Ray::new(intersection.point, se.wi);
+                ray = intersection.create_ray(se.wi);
             } else {
                 break;
             }
@@ -175,6 +189,8 @@ fn compute_luminance(world: &World<Spectrum>, mut ray: Ray, time: f32, rng: &mut
 }
 
 fn main() {
+    rayon::ThreadPoolBuilder::new().num_threads(num_cpus::get()).build_global().unwrap();
+
     let world = setup();
 
     let mut img = image::RgbImage::new(DIMS.0, DIMS.1);
@@ -188,7 +204,12 @@ fn main() {
     let camera_transform_sequence = TransformSequence::new(camera_position_sequence, Quat::default());
     let camera = Arc::new(PinholeCamera::new(DIMS.0 as f32 / DIMS.1 as f32, camera_transform_sequence));
 
-    let mut pixels = vec![Spectrum::zero(); DIMS.0 as usize * DIMS.1 as usize];
+    let mut pixels = Vec::with_capacity(DIMS.0 as usize * DIMS.1 as usize);
+    for i in 0..NUM_PIXELS {
+        let x = i % DIMS.0 as usize;
+        let y = (i - x) / DIMS.0 as usize;
+        pixels.push(((x, y), Spectrum::zero()));
+    }
 
     let frame_rate = 24;
     let frame_range = 3..4;
@@ -201,32 +222,32 @@ fn main() {
         let frame_start = frame as f32 * (1.0 / frame_rate as f32);
         let frame_end = frame_start + shutter_speed;
 
-        pixels.par_iter_mut().enumerate().for_each(|(i, p)| {
-            let x = i % DIMS.0 as usize;
-            let y = (i - x) / DIMS.0 as usize;
-            let col = (0..SAMPLES)
-                .map(|_| {
-                    let mut rng = thread_rng();
-                    let uniform = Uniform::new(0.0, 1.0);
-                    let (r1, r2) = (uniform.sample(&mut rng), uniform.sample(&mut rng));
-                    let uv = Vec2::new(
-                        (x as f32 + r1) / DIMS.0 as f32,
-                        (y as f32 + r2) / DIMS.1 as f32,
-                    );
-                    let time = rng.gen_range(frame_start, frame_end);
+        pixels.par_chunks_mut(CHUNK_SIZE).for_each(|chunk| {
+            let mut rng = thread_rng();
+            for ((x, y), pixel) in chunk.iter_mut() {
+                let col: Spectrum = (0..SAMPLES)
+                    .map(|_| {
+                        let uniform = Uniform::new(0.0, 1.0);
+                        let (r1, r2) = (uniform.sample(&mut rng), uniform.sample(&mut rng));
+                        let uv = Vec2::new(
+                            (*x as f32 + r1) / DIMS.0 as f32,
+                            (*y as f32 + r2) / DIMS.1 as f32,
+                        );
+                        let time = rng.gen_range(frame_start, frame_end);
 
-                    let ray = camera.clone().get_ray(uv, time);
-                    compute_luminance(&world, ray, time, &mut rng)
-                })
-                .fold(Spectrum::zero(), |a, b| a + b);
-            let col = col / SAMPLES as f32;
-            *p = col;
-            if i % 100_000 == 0 {
-                let n = mutated.fetch_add(1, Ordering::Relaxed);
-                println!(
-                    "{}% finished...",
-                    (n as f32 / (DIMS.0 * DIMS.1) as f32 * 100.0 * 100_000.0).round() as u32
-                );
+                        let ray = camera.clone().get_ray(uv, time);
+                        compute_luminance(&world, ray, time, &mut rng)
+                    })
+                    .sum();
+                let col = col / SAMPLES as f32;
+                *pixel = col;
+                if (*x + *y * DIMS.0 as usize) % 50_000 == 0 {
+                    let n = mutated.fetch_add(1, Ordering::Relaxed);
+                    println!(
+                        "{}% finished...",
+                        (n as f32 / (DIMS.0 * DIMS.1) as f32 * 100.0 * 50_000.0).round() as u32
+                    );
+                }
             }
         });
 
@@ -243,7 +264,7 @@ fn main() {
 
         for (x, y, pixel) in img.enumerate_pixels_mut() {
             let idx = x + (DIMS.1 - 1 - y) * DIMS.0;
-            *pixel = (pixels[idx as usize]).gamma_correct(2.2).into();
+            *pixel = (pixels[idx as usize].1).gamma_correct(2.2).into();
         }
 
         let args: Vec<String> = std::env::args().collect();

@@ -1,12 +1,14 @@
 use crate::math::Vec3;
 use image;
 use std::ops::*;
+use std::iter::*;
 use std::fmt::Debug;
 
 pub trait IsSpectrum: 
     Add<Self, Output=Self> + AddAssign<Self> + Sub<Self, Output=Self> + SubAssign<Self>
     + Mul<Self, Output=Self> + MulAssign<Self>
     + Mul<f32, Output=Self> + Div<f32, Output=Self>
+    + Sum
     + PartialEq + Sized + Clone + Copy + Debug + Into<image::Rgb<u8>> + Send + Sync
 {
     fn zero() -> Self;
@@ -47,6 +49,12 @@ impl IsSpectrum for RGBSpectrum {
 
     fn max_channel(&self) -> f32 {
         self.0.reduce_partial_max()
+    }
+}
+
+impl Sum for RGBSpectrum {
+    fn sum<I: Iterator<Item = Self>>(iter: I) -> Self {
+        iter.fold(RGBSpectrum::zero(), |a, b| a + b)
     }
 }
 
