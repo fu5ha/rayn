@@ -390,6 +390,7 @@ dependencies = [
  "rand 0.7.2 (registry+https://github.com/rust-lang/crates.io-index)",
  "rayon 1.2.0 (registry+https://github.com/rust-lang/crates.io-index)",
  "sdfu 0.1.2 (registry+https://github.com/rust-lang/crates.io-index)",
+ "splines 2.0.1 (registry+https://github.com/rust-lang/crates.io-index)",
  "vek 0.9.4 (registry+https://github.com/rust-lang/crates.io-index)",
 ]
 
@@ -452,6 +453,11 @@ dependencies = [
 [[package]]
 name = "semver-parser"
 version = "0.7.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+
+[[package]]
+name = "splines"
+version = "2.0.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 
 [[package]]
@@ -563,6 +569,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 "checksum sdfu 0.1.2 (registry+https://github.com/rust-lang/crates.io-index)" = "3f51595240aa4fdceb99dd24036b64734256dc165d3da448e8cff02832cf4391"
 "checksum semver 0.9.0 (registry+https://github.com/rust-lang/crates.io-index)" = "1d7eb9ef2c18661902cc47e535f9bc51b78acd254da71d375c2f6720d9a40403"
 "checksum semver-parser 0.7.0 (registry+https://github.com/rust-lang/crates.io-index)" = "388a1df253eca08550bef6c72392cfe7c30914bf41df5269b68cbd6ff8f570a3"
+"checksum splines 2.0.1 (registry+https://github.com/rust-lang/crates.io-index)" = "470758320a7ed5e7da096f2395f654e7a673d437d53c3cd4e132aa9f4e537d05"
 "checksum static_assertions 0.2.5 (registry+https://github.com/rust-lang/crates.io-index)" = "c19be23126415861cb3a23e501d34a708f7f9b2183c5252d690941c2e69199d5"
 "checksum syn 0.14.9 (registry+https://github.com/rust-lang/crates.io-index)" = "261ae9ecaa397c42b960649561949d69311f08eeaea86a65696e6e46517cf741"
 "checksum tiff 0.3.1 (registry+https://github.com/rust-lang/crates.io-index)" = "d7b7c2cfc4742bd8a32f2e614339dd8ce30dbcf676bb262bd63a2327bc5df57d"

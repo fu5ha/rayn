@@ -20,7 +20,7 @@ mod sdf;
 mod sphere;
 mod world;
 
-use animation::{ Sequence, TransformSequence };
+use animation::{ compute_cubic_spline_tangents, Sequence, TransformSequence };
 use camera::{ ThinLensCamera };
 use spectrum::{ IsSpectrum, RGBSpectrum };
 use hitable::{Hitable, HitableStore};
@@ -31,10 +31,10 @@ use sdf::TracedSDF;
 use sphere::Sphere;
 use world::World;
 
-const DIMS: (u32, u32) = (1920, 1080);
+const DIMS: (u32, u32) = (1280, 720);
 const CHUNK_SIZE: usize = 16 * 16;
-const SAMPLES: usize = 512;
-const MAX_BOUNCES: usize = 8;
+const SAMPLES: usize = 256;
+const MAX_BOUNCES: usize = 5;
 
 type Spectrum = RGBSpectrum;
 const NUM_PIXELS: usize = (DIMS.0 * DIMS.1) as usize;
@@ -51,6 +51,7 @@ fn setup() -> World<Spectrum> {
     let white_emissive = materials.add_material(Box::new(white_emissive));
     let ground = materials.add_material(Box::new(Dielectric::new(Spectrum::new(0.25, 0.2, 0.35), 0.3)));
     let gold = materials.add_material(Box::new(Metal::new(Spectrum::new(1.0, 0.9, 0.5), 0.0)));
+    let silver = materials.add_material(Box::new(Metal::new(Spectrum::new(0.9, 0.9, 0.9), 0.05)));
     let gold_rough = materials.add_material(Box::new(Metal::new(Spectrum::new(1.0, 0.9, 0.5), 0.5)));
     let glass = materials.add_material(Box::new(Refractive::new(Spectrum::new(0.9, 0.9, 0.9), 0.0, 1.5)));
     let glass_rough = materials.add_material(Box::new(Refractive::new(Spectrum::new(0.9, 0.9, 0.9), 0.5, 1.5)));
@@ -100,11 +101,18 @@ fn setup() -> World<Spectrum> {
     )));
     hitables.push(Box::new(Sphere::new(
         TransformSequence::new(
+            Vec3::new(-1.5, 0.0, -1.0),
+            Quat::default()),
+        0.4,
+        silver,
+    )));
+    hitables.push(Box::new(Sphere::new(
+        TransformSequence::new(
             |t: f32| -> Vec3 {
                 Vec3::new(
-                    0.2 - (2.0 * t * std::f32::consts::PI).sin() * 0.15,
+                    0.2 - (t * std::f32::consts::PI).sin() * 0.15,
                     -0.4,
-                    -0.35 - (2.0 * t * std::f32::consts::PI).cos() * 0.15)
+                    -0.35 - (t * std::f32::consts::PI).cos() * 0.15)
             },
             Quat::default()),
         0.1,
@@ -119,32 +127,73 @@ fn setup() -> World<Spectrum> {
     )));
     hitables.push(Box::new(Sphere::new(
         TransformSequence::new(
-            Vec3::new(-0.6, -0.375, -0.5),
-            // |t: f32| -> Vec3 {
-            //     Vec3::new(
-            //         -0.5 + (2.0 * t * std::f32::consts::PI).cos() * 1.5,
-            //         -0.375,
-            //         -0.5 - (2.0 * t * std::f32::consts::PI).sin() * 1.5)
-            // },
+            |t: f32| -> Vec3 {
+                Vec3::new(
+                    -0.5 + (2.0 * t * std::f32::consts::PI).cos() * 1.5,
+                    -0.375,
+                    -0.5 - (2.0 * t * std::f32::consts::PI).sin() * 1.5)
+            },
             Quat::default()),
         0.125,
         gold_rough,
     )));
 
     let camera_position_sequence: Sequence<[f32; 3]> = Sequence::new(
-        vec![0.0, 1.0, 2.0, 4.0, 5.0],
-        vec![[0.0, 0.0, 1.0], [0.0, 0.0, 1.0], [-0.5, 0.0, 2.0], [0.5, 0.0, 2.0], [0.0, 0.0, 1.0]],
-        minterpolate::InterpolationFunction::Linear,
+        vec![0.0, 1.0, 3.0, 4.0, 5.0, 8.0, 9.0],
+        compute_cubic_spline_tangents(
+            vec![
+                Vec3::new(0.0, 0.0, 1.0),
+                Vec3::new(0.0, 0.0, 1.0),
+                Vec3::new(0.1, 0.3, -0.5),
+                Vec3::new(0.1, 0.3, -1.5),
+                Vec3::new(-0.2, 0.3, -2.0),
+                Vec3::new(-0.2, -0.3, -0.5),
+                Vec3::new(0.0, 0.0, 1.0),
+            ],
+            0.25),
+        minterpolate::InterpolationFunction::CubicSpline,
+        false,
+    );
+
+    let camera_lookat_sequence: Sequence<[f32; 3]> = Sequence::new(
+        vec![0.0, 1.0, 3.0, 4.0, 5.0, 8.0],
+        compute_cubic_spline_tangents(
+            vec![
+                Vec3::new(-0.2, 0.1, -1.0),
+                Vec3::new(-0.2, 0.1, -1.0),
+                Vec3::new(0.1, 0.3, -1.0),
+                Vec3::new(0.1, 0.3, -2.0),
+                Vec3::new(-0.2, 0.1, -1.0),
+                Vec3::new(-0.2, 0.1, -1.0),
+            ],
+            0.25),
+        minterpolate::InterpolationFunction::CubicSpline,
+        false,
+    );
+
+    let camera_focus_sequence: Sequence<[f32; 3]> = Sequence::new(
+        vec![0.0, 1.0, 3.0, 4.0, 5.0, 8.0],
+        compute_cubic_spline_tangents(
+            vec![
+                Vec3::new(-0.2, 0.1, -1.0),
+                Vec3::new(-0.2, 0.1, -1.0),
+                Vec3::new(0.1, 0.3, -1.0),
+                Vec3::new(0.1, 0.3, -2.0),
+                Vec3::new(-0.2, 0.1, -1.0) * 0.7,
+                Vec3::new(-0.2, 0.1, -1.0),
+            ],
+            0.25),
+        minterpolate::InterpolationFunction::CubicSpline,
         false,
     );
     let camera = ThinLensCamera::new(
         DIMS.0 as f32 / DIMS.1 as f32,
         60.0,
-        0.05,
+        0.0225,
         camera_position_sequence,
-        Vec3::new(0.0, 0.0, -1.0),
+        camera_lookat_sequence,
         Vec3::new(0.0, 1.0, 0.0),
-        Vec3::new(-0.2, 0.0, -1.0) * 0.7);
+        camera_focus_sequence);
 
 
     World {
@@ -218,7 +267,7 @@ fn main() {
     }
 
     let frame_rate = 24;
-    let frame_range = 3..4;
+    let frame_range = 0..216;
     let shutter_speed = 1.0 / 24.0;
 
     for frame in frame_range {
