@@ -1,5 +1,4 @@
 use std::sync::atomic::{AtomicUsize, Ordering};
-use std::sync::Arc;
 use std::time::Instant;
 
 use dynamic_arena::{ DynamicArena, NonSend };
@@ -22,7 +21,7 @@ mod sphere;
 mod world;
 
 use animation::{ Sequence, TransformSequence };
-use camera::{ Camera, PinholeCamera };
+use camera::{ ThinLensCamera };
 use spectrum::{ IsSpectrum, RGBSpectrum };
 use hitable::{Hitable, HitableStore};
 use material::{Dielectric, Emissive, Checkerboard3d, MaterialStore, Metal, Refractive};
@@ -32,9 +31,9 @@ use sdf::TracedSDF;
 use sphere::Sphere;
 use world::World;
 
-const DIMS: (u32, u32) = (1280, 720);
-const CHUNK_SIZE: usize = 32 * 32;
-const SAMPLES: usize = 32;
+const DIMS: (u32, u32) = (1920, 1080);
+const CHUNK_SIZE: usize = 16 * 16;
+const SAMPLES: usize = 512;
 const MAX_BOUNCES: usize = 8;
 
 type Spectrum = RGBSpectrum;
@@ -53,7 +52,6 @@ fn setup() -> World<Spectrum> {
     let ground = materials.add_material(Box::new(Dielectric::new(Spectrum::new(0.25, 0.2, 0.35), 0.3)));
     let gold = materials.add_material(Box::new(Metal::new(Spectrum::new(1.0, 0.9, 0.5), 0.0)));
     let gold_rough = materials.add_material(Box::new(Metal::new(Spectrum::new(1.0, 0.9, 0.5), 0.5)));
-    let silver = materials.add_material(Box::new(Metal::new(Spectrum::new(0.9, 0.9, 0.9), 0.1)));
     let glass = materials.add_material(Box::new(Refractive::new(Spectrum::new(0.9, 0.9, 0.9), 0.0, 1.5)));
     let glass_rough = materials.add_material(Box::new(Refractive::new(Spectrum::new(0.9, 0.9, 0.9), 0.5, 1.5)));
 
@@ -133,9 +131,26 @@ fn setup() -> World<Spectrum> {
         gold_rough,
     )));
 
+    let camera_position_sequence: Sequence<[f32; 3]> = Sequence::new(
+        vec![0.0, 1.0, 2.0, 4.0, 5.0],
+        vec![[0.0, 0.0, 1.0], [0.0, 0.0, 1.0], [-0.5, 0.0, 2.0], [0.5, 0.0, 2.0], [0.0, 0.0, 1.0]],
+        minterpolate::InterpolationFunction::Linear,
+        false,
+    );
+    let camera = ThinLensCamera::new(
+        DIMS.0 as f32 / DIMS.1 as f32,
+        60.0,
+        0.05,
+        camera_position_sequence,
+        Vec3::new(0.0, 0.0, -1.0),
+        Vec3::new(0.0, 1.0, 0.0),
+        Vec3::new(-0.2, 0.0, -1.0) * 0.7);
+
+
     World {
         materials,
         hitables,
+        camera: Box::new(camera),
     }
 }
 
@@ -195,15 +210,6 @@ fn main() {
 
     let mut img = image::RgbImage::new(DIMS.0, DIMS.1);
 
-    let camera_position_sequence: Sequence<[f32; 3]> = Sequence::new(
-        vec![0.0, 1.0, 2.0, 4.0, 5.0],
-        vec![[0.0, 0.0, 1.0], [0.0, 0.0, 1.0], [-0.5, 0.0, 2.0], [0.5, 0.0, 2.0], [0.0, 0.0, 1.0]],
-        minterpolate::InterpolationFunction::Linear,
-        false,
-    );
-    let camera_transform_sequence = TransformSequence::new(camera_position_sequence, Quat::default());
-    let camera = Arc::new(PinholeCamera::new(DIMS.0 as f32 / DIMS.1 as f32, camera_transform_sequence));
-
     let mut pixels = Vec::with_capacity(DIMS.0 as usize * DIMS.1 as usize);
     for i in 0..NUM_PIXELS {
         let x = i % DIMS.0 as usize;
@@ -235,7 +241,7 @@ fn main() {
                         );
                         let time = rng.gen_range(frame_start, frame_end);
 
-                        let ray = camera.clone().get_ray(uv, time);
+                        let ray = world.camera.get_ray(uv, time, &mut rng);
                         compute_luminance(&world, ray, time, &mut rng)
                     })
                     .sum();

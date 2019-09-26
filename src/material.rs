@@ -3,7 +3,7 @@ use rand::prelude::*;
 
 use crate::spectrum::IsSpectrum;
 use crate::hitable::Intersection;
-use crate::math::{f0_from_ior, f_schlick, f_schlick_c, saturate, OrthonormalBasis, RandomSample, Vec3};
+use crate::math::{ f0_from_ior, f_schlick, f_schlick_c, saturate, OrthonormalBasis, RandomSample3d, Vec3 };
 
 pub trait BSDF<S: IsSpectrum>: Send + Sync {
     fn scatter(&self, wo: Vec3, intersection: &mut Intersection<S>, rng: &mut ThreadRng) -> Option<ScatteringEvent<S>>;
