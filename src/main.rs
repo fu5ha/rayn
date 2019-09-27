@@ -14,7 +14,7 @@ mod sdf;
 mod sphere;
 mod world;
 
-use animation::{ compute_cubic_spline_tangents, Sequence, TransformSequence };
+use animation::{ Sequence, TransformSequence };
 use camera::{ CameraHandle, CameraStore, ThinLensCamera };
 use film::{ ChannelKind, Film };
 use spectrum::{ Xyz, Rgb };
@@ -29,7 +29,7 @@ use world::World;
 use std::time::Instant;
 
 const RES: (usize, usize) = (1280, 720);
-const SAMPLES: usize = 16;
+const SAMPLES: usize = 128;
 
 type Spectrum = Xyz;
 
@@ -265,9 +265,7 @@ fn main() {
         film.save_to(
             "renders",
             format!("frame{}", frame),
-            true,
+            false,
         );
-
     }
-    drop(world);
 }

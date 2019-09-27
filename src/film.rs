@@ -10,8 +10,9 @@ use crate::spectrum::{ Xyz, Rgb, IsSpectrum };
 use crate::integrator::{ Integrator };
 use crate::world::World;
 
-use std::sync::Mutex;
+use std::sync::{ atomic::{ AtomicUsize, Ordering }, Mutex };
 use std::ops::Range;
+use std::cell::UnsafeCell;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum ChannelKind {
@@ -31,21 +32,29 @@ impl ChannelKind {
 }
 
 pub type Channel = (ChannelKind, Vec<f32>);
+pub type UnsafeChannel = (ChannelKind, UnsafeCell<Vec<f32>>);
 
-pub type ChannelChunkMut<'a> = (ChannelKind, &'a mut [f32]);
+pub type ChannelTileMut<'a> = (ChannelKind, &'a mut [f32]);
 
-pub struct Film<N: ArrayLength<Channel>> {
+unsafe impl<N: ArrayLength<UnsafeChannel>> Send for Tile<N> {}
+unsafe impl<N: ArrayLength<UnsafeChannel>> Sync for Tile<N> {}
+
+pub struct Tile<N: ArrayLength<UnsafeChannel>> {
+    epoch: AtomicUsize,
+    channels: GenericArray<UnsafeChannel, N>,
+    pixel_bounds: Aabru,
+    uv_bounds: Aabr,
+}
+
+pub struct Film<N: ArrayLength<Channel> + ArrayLength<UnsafeChannel>> {
     channels: Mutex<GenericArray<Channel, N>>,
-    chunks: (usize, Vec<(GenericArray<Channel, N>, Aabru, Aabr)>),
+    tiles: Vec<Tile<N>>,
+    progressive_epoch: usize,
+    this_epoch_tiles_finished: AtomicUsize,
     res: Extent2u,
 }
 
-struct Finished {
-    pub epoch: usize,
-    pub chunk_idx: usize,
-}
-
-impl<'a, N: ArrayLength<Channel> + ArrayLength<ChannelChunkMut<'a>>> Film<N>  {
+impl<'a, N: ArrayLength<Channel> + ArrayLength<UnsafeChannel>> Film <N> { 
     pub fn new(
         channels: &[ChannelKind],
         res: Extent2u,
@@ -55,7 +64,9 @@ impl<'a, N: ArrayLength<Channel> + ArrayLength<ChannelChunkMut<'a>>> Film<N>  {
                 let size = kind.channel_size();
                 (*kind, vec![0f32; size * res.w * res.h])
             })).unwrap()),
-            chunks: (0, Vec::new()),
+            tiles: Vec::new(),
+            progressive_epoch: 0,
+            this_epoch_tiles_finished: AtomicUsize::new(0),
             res,
         }
     }
@@ -86,8 +97,8 @@ impl<'a, N: ArrayLength<Channel> + ArrayLength<ChannelChunkMut<'a>>> Film<N>  {
                 let mut img = image::RgbaImage::new(self.res.w as u32, self.res.h as u32);
                 for (x, y, pixel) in img.enumerate_pixels_mut() {
                     let idx = (x as usize + (self.res.h - 1 - y as usize) * self.res.w) * 4;
-                    let rgb = Rgb::from(Xyz::new(color_buf[idx], color_buf[idx + 1], color_buf[idx + 2]).gamma_corrected(2.2));
                     let a = color_buf[idx + 3];
+                    let rgb = Rgb::from(Xyz::new(color_buf[idx], color_buf[idx + 1], color_buf[idx + 2]).gamma_corrected(2.2)) * a;
                     *pixel = image::Rgba([
                         (rgb.r * 255.0).min(255.0).max(0.0) as u8,
                         (rgb.g * 255.0).min(255.0).max(0.0) as u8,
@@ -162,28 +173,70 @@ impl<'a, N: ArrayLength<Channel> + ArrayLength<ChannelChunkMut<'a>>> Film<N>  {
             }
         }
     }
+}
 
+impl<'a, N: ArrayLength<Channel> + ArrayLength<UnsafeChannel> + ArrayLength<ChannelTileMut<'a>>> Film<N>  {
     pub fn render_frame_into<I: Integrator, S: IsSpectrum>(
-        &mut self,
+        &'a mut self,
         world: &World<S>,
         camera: CameraHandle,
         integrator: I,
-        chunk_size: Extent2u,
+        tile_size: Extent2u,
         time_range: Range<f32>,
         samples: usize,
     ) {
         let camera = world.cameras.get(camera);
+        self.tiles.clear();
 
-        self.iter_chunks(chunk_size, |mut chunk, chunk_extent, uv_bounds| {
+        let rem = Vec2u::new(
+            (self.res.w) % tile_size.w,
+            (self.res.h) % tile_size.h);
+        {
+            let channels = self.channels.lock().unwrap();
+            for tile_x in 0..((self.res.w + rem.x) / tile_size.w) {
+                for tile_y in 0..((self.res.h + rem.y) / tile_size.h) {
+                    let start = Vec2u::new(tile_x * tile_size.w, tile_y * tile_size.h);
+                    let end = Vec2u::new(
+                        (start.x + tile_size.w).min(self.res.w),
+                        (start.y + tile_size.h).min(self.res.h));
+                    let tile_bounds = Aabru {
+                        min: start,
+                        max: end,
+                    };
+                    let actual_tile_size = tile_bounds.size();
+
+                    let uv_start = Vec2::new(start.x as f32 / self.res.w as f32, start.y as f32 / self.res.h as f32);
+                    let uv_end = Vec2::new(end.x as f32 / self.res.w as f32, end.y as f32 / self.res.h as f32);
+                    let uv_bounds = Aabr {
+                        min: uv_start,
+                        max: uv_end
+                    };
+
+                    let tile_channels = GenericArray::from_exact_iter(channels.iter().map(|(kind, _)| {
+                        let size = kind.channel_size();
+                        (*kind, UnsafeCell::new(vec![0f32; size * actual_tile_size.w * actual_tile_size.h]))
+                    })).unwrap();
+
+                    self.tiles.push(Tile {
+                        epoch: AtomicUsize::new(0),
+                        channels: tile_channels,
+                        pixel_bounds: tile_bounds,
+                        uv_bounds,
+                    });
+                }
+            }
+        }
+
+        self.integrate_tiles(|mut tile, tile_extent, uv_bounds| {
             let mut rng = rand::thread_rng();
             let uniform = Uniform::new(0.0, 1.0);
 
             let arena = DynamicArena::<'_, NonSend>::new_bounded();
 
-            let chunk_extent_f32 = Vec2::new(chunk_extent.w as f32, chunk_extent.h as f32);
+            let tile_extent_f32 = Vec2::new(tile_extent.w as f32, tile_extent.h as f32);
 
-            for x in 0..chunk_extent.w {
-                for y in 0..chunk_extent.h {
+            for x in 0..tile_extent.w {
+                for y in 0..tile_extent.h {
                     let mut col_spect = S::zero();
                     let mut col_a = 0.0;
                     let mut back_spect = S::zero();
@@ -191,8 +244,8 @@ impl<'a, N: ArrayLength<Channel> + ArrayLength<ChannelChunkMut<'a>>> Film<N>  {
                     for _ in 0..samples {
                         let r = Vec2::new(uniform.sample(&mut rng), uniform.sample(&mut rng));
 
-                        let chunk_xy = Vec2::new(x as f32, y as f32) + r;
-                        let uv_offset = chunk_xy / chunk_extent_f32 * uv_bounds.size();
+                        let tile_xy = Vec2::new(x as f32, y as f32) + r;
+                        let uv_offset = tile_xy / tile_extent_f32 * uv_bounds.size();
                         let uv = uv_bounds.min + uv_offset;
 
                         let time = rng.gen_range(time_range.start, time_range.end);
@@ -215,9 +268,9 @@ impl<'a, N: ArrayLength<Channel> + ArrayLength<ChannelChunkMut<'a>>> Film<N>  {
                     back_spect = back_spect / samples as f32;
                     normals /= samples as f32;
 
-                    for (kind, buf) in chunk.iter_mut() {
+                    for (kind, buf) in tile.iter_mut() {
                         let size = kind.channel_size();
-                        let base_idx = (x + y * chunk_extent.w) * size;
+                        let base_idx = (x + y * tile_extent.w) * size;
                         use ChannelKind::*;
                         match *kind {
                             Color => {
@@ -245,109 +298,86 @@ impl<'a, N: ArrayLength<Channel> + ArrayLength<ChannelChunkMut<'a>>> Film<N>  {
         });
     }
 
-    fn iter_chunks<F>(&mut self, canonical_chunk_size: Extent2u, integrate_chunk: F)
-        where F: FnOnce(GenericArray<ChannelChunkMut<'a>, N>, Extent2u, Aabr) + Send + Sync + Copy
+    fn integrate_tiles<F>(&'a mut self, integrate_tile: F)
+        where F: FnOnce(GenericArray<ChannelTileMut<'a>, N>, Extent2u, Aabr) + Send + Sync + Copy
     {
-        self.chunks.0 += 1;
-        self.chunks.1.clear();
-
-        let rem = Vec2u::new(
-            (self.res.w) % canonical_chunk_size.w,
-            (self.res.h) % canonical_chunk_size.h);
-        {
-            let channels = self.channels.lock().unwrap();
-            for cx in 0..((self.res.w + rem.x) / canonical_chunk_size.w) {
-                for cy in 0..((self.res.h + rem.y) / canonical_chunk_size.h) {
-                    let start = Vec2u::new(cx * canonical_chunk_size.w, cy * canonical_chunk_size.h);
-                    let end = Vec2u::new(
-                        (start.x + canonical_chunk_size.w).min(self.res.w),
-                        (start.y + canonical_chunk_size.h).min(self.res.h));
-                    let chunk_bounds = Aabru {
-                        min: start,
-                        max: end,
-                    };
-                    let chunk_size = chunk_bounds.size();
-                    let uv_start = Vec2::new(start.x as f32 / self.res.w as f32, start.y as f32 / self.res.h as f32);
-                    let uv_end = Vec2::new(end.x as f32 / self.res.w as f32, end.y as f32 / self.res.h as f32);
-                    let uv_bounds = Aabr {
-                        min: uv_start,
-                        max: uv_end
-                    };
-
-                    let channel_chunks = GenericArray::from_exact_iter(channels.iter().map(|(kind, _)| {
-                        let size = kind.channel_size();
-                        (*kind, vec![0f32; size * chunk_size.w * chunk_size.h])
-                    })).unwrap();
-
-                    self.chunks.1.push((
-                        channel_chunks, chunk_bounds, uv_bounds
-                    ));
-                }
-            }
-        }
-
-        let chunk_buffers = self
-            .chunks
-            .1
-            .iter_mut()
-            .map(|(channel_chunks, _, _)| {
-                GenericArray::from_exact_iter(channel_chunks.iter_mut().map(|(kind, buf)| {
-                    let buffer_ptr = buf.as_mut_ptr();
-                    let buffer_len = buf.len();
+        let tile_infos = self
+            .tiles
+            .iter()
+            .enumerate()
+            .map(|(idx, Tile { channels, pixel_bounds, uv_bounds, .. }) | {
+                let tile_channels = GenericArray::from_exact_iter(channels.iter().map(|(kind, buf)| {
                     // Safe because we guarantee that nobody else is accessing this specific
                     // slice at the same time, and we do not modify or read the underlying Vec
                     // until after this ref goes out of scope.
-                    (*kind, unsafe { std::slice::from_raw_parts_mut(buffer_ptr, buffer_len) })
-                })).unwrap()
+                    let vec = unsafe { &mut *buf.get() };
+                    (*kind, vec.as_mut())
+                })).unwrap();
+
+                (idx, tile_channels, pixel_bounds.size(), *uv_bounds)
             }).collect::<Vec<_>>();
+        
+        let num_tiles = self.tiles.len();
 
-        let this = &*self;
-        rayon::scope_fifo(|scope| {
-            let epoch = self.chunks.0;
-            for (chunk_idx, chunk_buffer) in chunk_buffers.into_iter().enumerate() {
-                scope.spawn_fifo(move |_| {
-                    let (_, bounds, uv_bounds) = this.chunks.1[chunk_idx];
-                    integrate_chunk(chunk_buffer, bounds.size(), uv_bounds);
-                    
-                    this.chunk_finished(Finished { epoch, chunk_idx });
-                })
-            }
-        })
-    }
+        {
+            let epoch = self.progressive_epoch;
+            let this = &*self;
+            rayon::scope_fifo(|scope| {
+                for (tile_idx, tile_channels, pixel_size, uv_bounds) in tile_infos.into_iter() {
+                    scope.spawn_fifo(move |_| {
+                        integrate_tile(tile_channels, pixel_size, uv_bounds);
 
-    fn chunk_finished(&self, finished: Finished) {
-        if finished.epoch != self.chunks.0 {
-            panic!("Epoch mismatch! Expected: {}, got: {}", self.chunks.0, finished.epoch)
+                        this.tile_finished(tile_idx, epoch)
+                    })
+                }
+            });
         }
 
-        let chunk_percent = 1.0 / self.chunks.1.len() as f32 * 100.0;
-        let chunk_percent_target = 5.0;
-        let chunk_divisor = (chunk_percent_target / chunk_percent).round() as usize;
+        while !self.this_epoch_tiles_finished.load(Ordering::Relaxed) == num_tiles {
+            std::thread::sleep(std::time::Duration::from_millis(10));
+        }
+
+        self.this_epoch_tiles_finished.store(0, Ordering::Relaxed);
+        self.progressive_epoch += 1;
+    }
+
+    fn tile_finished(&self, tile_idx: usize, epoch: usize) {
+        let tile = &self.tiles[tile_idx];
+        let tile_epoch = tile.epoch.fetch_add(1, Ordering::Relaxed);
+        if epoch != tile_epoch {
+            panic!("Epoch mismatch! Expected: {}, got: {}", tile_epoch, epoch)
+        }
+
+        let tile_percent = 1.0 / self.tiles.len() as f32 * 100.0;
+        let tile_percent_target = 5.0;
+        let tile_divisor = (tile_percent_target / tile_percent).round() as usize;
         
-        if finished.chunk_idx % chunk_divisor == 0 {
+        if tile_idx % tile_divisor == 0 {
             println!(
                 "{}% finished...",
-                (finished.chunk_idx as f32 * chunk_percent).round() as u32
+                (tile_idx as f32 * tile_percent).round() as u32
             );
         }
 
         let mut channels = self.channels.lock().unwrap();
 
-        let (channel_chunks, bounds, _) = &self.chunks.1[finished.chunk_idx];
+        let Tile { channels: tile_channels, pixel_bounds: tile_bounds, .. } = tile;
+        let extent = tile.pixel_bounds.size();
 
-        let extent = bounds.size();
-
-        for (chunk, channel) in channel_chunks.iter().zip(channels.iter_mut()) {
-            assert!(chunk.0 == channel.0);
-            let size = chunk.0.channel_size();
+        for (tile_channel, channel) in tile_channels.iter().zip(channels.iter_mut()) {
+            assert!(tile_channel.0 == channel.0);
+            let size = tile_channel.0.channel_size();
+            // Safe because we guarantee that we won't start modifying this chunk again
+            // until the next epoch.
+            let tile_channel = unsafe { &*tile_channel.1.get() };
             for x in 0..extent.w {
                 for y in 0..extent.h {
-                    let chunk_base_idx = (x + y * extent.w) * size;
-                    let channel_base_idx = ((bounds.min.x + x) + (bounds.min.y + y) * self.res.w) * size;
+                    let tile_base_idx = (x + y * extent.w) * size;
+                    let channel_base_idx = ((tile_bounds.min.x + x) + (tile_bounds.min.y + y) * self.res.w) * size;
                     for offset in 0..size {
-                        let chunk_idx = chunk_base_idx + offset;
+                        let tile_idx = tile_base_idx + offset;
                         let channel_idx = channel_base_idx + offset;
-                        channel.1[channel_idx] = chunk.1[chunk_idx];
+                        channel.1[channel_idx] = tile_channel[tile_idx];
                     }
                 }
             }
