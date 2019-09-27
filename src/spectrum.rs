@@ -1,5 +1,4 @@
 use crate::math::Vec3;
-use image;
 use std::ops::*;
 use std::iter::*;
 use std::fmt::Debug;
@@ -7,9 +6,9 @@ use std::fmt::Debug;
 pub trait IsSpectrum: 
     Add<Self, Output=Self> + AddAssign<Self> + Sub<Self, Output=Self> + SubAssign<Self>
     + Mul<Self, Output=Self> + MulAssign<Self>
-    + Mul<f32, Output=Self> + Div<f32, Output=Self>
+    + Mul<f32, Output=Self> + Div<f32, Output=Self> + DivAssign<f32>
     + Sum
-    + PartialEq + Sized + Clone + Copy + Debug + Into<image::Rgb<u8>> + Send + Sync
+    + PartialEq + Sized + Clone + Copy + Debug + Into<Xyz> + From<Xyz> + Send + Sync
 {
     fn zero() -> Self;
     fn one() -> Self;
@@ -17,30 +16,80 @@ pub trait IsSpectrum:
     fn max_channel(&self) -> f32;
 }
 
+type VekRgb = vek::vec::Rgb<f32>;
+
 #[derive(Clone, Copy, Debug, PartialEq)]
-pub struct RGBSpectrum(pub Vec3);
+pub struct Rgb(pub VekRgb);
 
-impl RGBSpectrum {
-    pub fn new(r: f32, g: f32, b: f32) -> Self {
-        RGBSpectrum(Vec3::new(r, g, b))
-    }
-
-    pub fn gamma_correct(self, gamma: f32) -> Self {
-        RGBSpectrum(Vec3::new(
-            self.0.x.powf(1.0 / gamma),
-            self.0.y.powf(1.0 / gamma),
-            self.0.z.powf(1.0 / gamma),
-        ))
+impl From<Vec3> for Rgb {
+    fn from(v: Vec3) -> Self {
+        Rgb(VekRgb::from(v))
     }
 }
 
-impl IsSpectrum for RGBSpectrum {
+impl Rgb {
+    pub fn new(r: f32, g: f32, b: f32) -> Self {
+        Rgb(VekRgb::new(r, g, b))
+    }
+
+}
+
+impl Deref for Rgb {
+    type Target = VekRgb;
+    fn deref(&self) -> &VekRgb {
+        &self.0
+    }
+}
+
+
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct Xyz(Vec3);
+
+impl Deref for Xyz {
+    type Target = Vec3;
+    fn deref(&self) -> &Vec3 {
+        &self.0
+    }
+}
+
+impl Xyz {
+    pub fn new(x: f32, y: f32, z: f32) -> Self {
+        Xyz(Vec3::new(x, y, z))
+    }
+
+    pub fn gamma_corrected(&mut self, gamma: f32) -> Self {
+        Xyz(self.0.map(|x| x.powf(1.0 / gamma)))
+    }
+}
+
+impl From<Rgb> for Xyz {
+    fn from(rgb: Rgb) -> Self {
+        Xyz(Vec3 {
+            x: 0.412453*rgb.r + 0.357580*rgb.g + 0.180423*rgb.b,
+            y: 0.212671*rgb.r + 0.715160*rgb.g + 0.072169*rgb.b,
+            z: 0.019334*rgb.r + 0.119193*rgb.g + 0.950227*rgb.b
+        })
+    }
+}
+
+impl From<Xyz> for Rgb {
+    fn from(xyz: Xyz) -> Self {
+        Rgb::new(
+            3.240479*xyz.x - 1.537150*xyz.y - 0.498535*xyz.z,
+            -0.969256*xyz.x + 1.875991*xyz.y + 0.041556*xyz.z,
+            0.055648*xyz.x - 0.204043*xyz.y + 1.057311*xyz.z,
+        )
+    }
+}
+
+
+impl IsSpectrum for Xyz {
     fn zero() -> Self {
-        RGBSpectrum(Vec3::zero())
+        Xyz(Vec3::zero())
     }
 
     fn one() -> Self {
-        RGBSpectrum(Vec3::one())
+        Xyz(Vec3::one())
     }
 
     fn is_black(&self) -> bool {
@@ -52,89 +101,86 @@ impl IsSpectrum for RGBSpectrum {
     }
 }
 
-impl Sum for RGBSpectrum {
+impl Sum for Xyz {
     fn sum<I: Iterator<Item = Self>>(iter: I) -> Self {
-        iter.fold(RGBSpectrum::zero(), |a, b| a + b)
+        iter.fold(Xyz::zero(), |a, b| a + b)
     }
 }
 
-impl From<RGBSpectrum> for image::Rgb<u8> {
-    fn from(col: RGBSpectrum) -> Self {
-        image::Rgb([
-            (col.0.x * 255.0).min(255.0).max(0.0) as u8,
-            (col.0.y * 255.0).min(255.0).max(0.0) as u8,
-            (col.0.z * 255.0).min(255.0).max(0.0) as u8,
-        ])
-    }
+macro_rules! impl_wrapper_ops {
+    ($wrapper_t:ident) => {
+        impl ::std::ops::Add for $wrapper_t {
+            type Output = $wrapper_t;
+
+            fn add(self, other: $wrapper_t) -> $wrapper_t {
+                $wrapper_t(self.0 + other.0)
+            }
+        }
+
+        impl std::ops::AddAssign for $wrapper_t {
+            fn add_assign(&mut self, rhs: Self) {
+                *self = *self + rhs
+            }
+        }
+
+        impl ::std::ops::Sub for $wrapper_t {
+            type Output = $wrapper_t;
+
+            fn sub(self, other: $wrapper_t) -> $wrapper_t {
+                $wrapper_t(self.0 - other.0)
+            }
+        }
+
+        impl std::ops::SubAssign for $wrapper_t {
+            fn sub_assign(&mut self, rhs: Self) {
+                *self = *self - rhs
+            }
+        }
+
+        impl ::std::ops::Div<f32> for $wrapper_t {
+            type Output = $wrapper_t;
+
+            fn div(self, other: f32) -> $wrapper_t {
+                $wrapper_t(self.0 / other)
+            }
+        }
+
+        impl std::ops::DivAssign<f32> for $wrapper_t {
+            fn div_assign(&mut self, rhs: f32) {
+                *self = *self / rhs
+            }
+        }
+
+        impl ::std::ops::Mul<f32> for $wrapper_t {
+            type Output = $wrapper_t;
+
+            fn mul(self, other: f32) -> $wrapper_t {
+                $wrapper_t(self.0 * other)
+            }
+        }
+
+        impl std::ops::MulAssign<f32> for $wrapper_t {
+            fn mul_assign(&mut self, rhs: f32) {
+                *self = *self * rhs
+            }
+        }
+
+        impl ::std::ops::Mul<$wrapper_t> for $wrapper_t {
+            type Output = $wrapper_t;
+
+            fn mul(self, other: $wrapper_t) -> $wrapper_t {
+                $wrapper_t(self.0 * other.0)
+            }
+        }
+
+        impl std::ops::MulAssign for $wrapper_t {
+            fn mul_assign(&mut self, rhs: Self) {
+                *self = *self * rhs
+            }
+        }
+    };
 }
 
-impl ::std::ops::Add for RGBSpectrum {
-    type Output = RGBSpectrum;
-
-    fn add(self, other: RGBSpectrum) -> RGBSpectrum {
-        RGBSpectrum(self.0 + other.0)
-    }
-}
-
-impl std::ops::AddAssign for RGBSpectrum {
-    fn add_assign(&mut self, rhs: Self) {
-        *self = *self + rhs
-    }
-}
-
-impl ::std::ops::Sub for RGBSpectrum {
-    type Output = RGBSpectrum;
-
-    fn sub(self, other: RGBSpectrum) -> RGBSpectrum {
-        RGBSpectrum(self.0 - other.0)
-    }
-}
-
-impl std::ops::SubAssign for RGBSpectrum {
-    fn sub_assign(&mut self, rhs: Self) {
-        *self = *self - rhs
-    }
-}
-
-impl ::std::ops::Div<f32> for RGBSpectrum {
-    type Output = RGBSpectrum;
-
-    fn div(self, other: f32) -> RGBSpectrum {
-        RGBSpectrum(self.0 / other)
-    }
-}
-
-impl std::ops::DivAssign<f32> for RGBSpectrum {
-    fn div_assign(&mut self, rhs: f32) {
-        *self = *self / rhs
-    }
-}
-
-impl ::std::ops::Mul<f32> for RGBSpectrum {
-    type Output = RGBSpectrum;
-
-    fn mul(self, other: f32) -> RGBSpectrum {
-        RGBSpectrum(self.0 * other)
-    }
-}
-
-impl std::ops::MulAssign<f32> for RGBSpectrum {
-    fn mul_assign(&mut self, rhs: f32) {
-        *self = *self * rhs
-    }
-}
-
-impl ::std::ops::Mul<RGBSpectrum> for RGBSpectrum {
-    type Output = RGBSpectrum;
-
-    fn mul(self, other: RGBSpectrum) -> RGBSpectrum {
-        RGBSpectrum(self.0 * other.0)
-    }
-}
-
-impl std::ops::MulAssign for RGBSpectrum {
-    fn mul_assign(&mut self, rhs: Self) {
-        *self = *self * rhs
-    }
-}
+impl_wrapper_ops!(Xyz);
+impl_wrapper_ops!(Rgb);
 

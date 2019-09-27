@@ -8,6 +8,26 @@ pub trait Camera: Send + Sync {
     fn get_ray(&self, uv: Vec2, time: f32, rng: &mut ThreadRng) -> Ray;
 }
 
+#[derive(Clone, Copy, Debug)]
+pub struct CameraHandle(usize);
+
+pub struct CameraStore(Vec<Box<dyn Camera>>);
+
+impl CameraStore {
+    pub fn new() -> Self {
+        CameraStore(Vec::new())
+    }
+
+    pub fn add_camera(&mut self, material: Box<dyn Camera>) -> CameraHandle {
+        self.0.push(material);
+        CameraHandle(self.0.len() - 1)
+    }
+
+    pub fn get(&self, handle: CameraHandle) -> &dyn Camera {
+        self.0.get(handle.0).map(|b| b.as_ref()).unwrap()
+    }
+}
+
 #[derive(Copy, Clone)]
 pub struct PinholeCamera<TR> {
     lower_left: Vec3,

@@ -1,9 +1,9 @@
 use crate::hitable::HitableStore;
 use crate::material::MaterialStore;
-use crate::camera::Camera;
+use crate::camera::CameraStore;
 
 pub struct World<S> {
     pub hitables: HitableStore<S>,
     pub materials: MaterialStore<S>,
-    pub camera: Box<dyn Camera>,
+    pub cameras: CameraStore,
 }

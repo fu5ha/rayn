@@ -8,6 +8,10 @@ use crate::spectrum::IsSpectrum;
 pub type Vec4 = vec::repr_c::Vec4<f32>;
 pub type Vec3 = vec::repr_c::Vec3<f32>;
 pub type Vec2 = vec::repr_c::Vec2<f32>;
+pub type Vec2u = vec::repr_c::Vec2<usize>;
+pub type Aabr = vek::geom::repr_c::Aabr<f32>;
+pub type Aabru = vek::geom::repr_c::Aabr<usize>;
+pub type Extent2u = vek::vec::repr_c::Extent2<usize>;
 
 pub type Mat3 = vek::mat::repr_c::Mat3<f32>;
 pub type CVec3<T> = vec::repr_c::Vec3<T>;
