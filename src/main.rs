@@ -20,7 +20,7 @@ mod sdf;
 mod sphere;
 mod world;
 
-use animation::{ compute_cubic_spline_tangents, Sequence, TransformSequence };
+use animation::{ Sequence, TransformSequence };
 use camera::{ ThinLensCamera };
 use spectrum::{ IsSpectrum, RGBSpectrum };
 use hitable::{Hitable, HitableStore};
@@ -140,56 +140,70 @@ fn setup() -> World<Spectrum> {
 
     let camera_position_sequence: Sequence<[f32; 3]> = Sequence::new(
         vec![0.0, 1.0, 3.0, 4.0, 5.0, 8.0, 9.0],
-        compute_cubic_spline_tangents(
-            vec![
-                Vec3::new(0.0, 0.0, 1.0),
-                Vec3::new(0.0, 0.0, 1.0),
-                Vec3::new(0.1, 0.3, -0.5),
-                Vec3::new(0.1, 0.3, -1.5),
-                Vec3::new(-0.2, 0.3, -2.0),
-                Vec3::new(-0.2, -0.3, -0.5),
-                Vec3::new(0.0, 0.0, 1.0),
-            ],
-            0.25),
-        minterpolate::InterpolationFunction::CubicSpline,
+        vec![
+            [0.0, 0.0, 1.5],
+            [0.0, 0.0, 1.0],
+            [0.0, 0.0, 0.5],
+            [0.1, 0.3, -0.5],
+            [0.1, 0.3, -1.5],
+            [-0.2, 0.3, -2.0],
+            [-0.2, -0.3, -0.5],
+            [0.0, 0.0, 1.0],
+            [0.0, 0.0, 1.5],
+        ],
+        minterpolate::InterpolationFunction::CatmullRomSpline,
         false,
     );
 
     let camera_lookat_sequence: Sequence<[f32; 3]> = Sequence::new(
-        vec![0.0, 1.0, 3.0, 4.0, 5.0, 8.0],
-        compute_cubic_spline_tangents(
-            vec![
-                Vec3::new(-0.2, 0.1, -1.0),
-                Vec3::new(-0.2, 0.1, -1.0),
-                Vec3::new(0.1, 0.3, -1.0),
-                Vec3::new(0.1, 0.3, -2.0),
-                Vec3::new(-0.2, 0.1, -1.0),
-                Vec3::new(-0.2, 0.1, -1.0),
-            ],
-            0.25),
-        minterpolate::InterpolationFunction::CubicSpline,
+        vec![0.0, 1.0, 3.0, 3.5, 5.0],
+        vec![
+            [-0.2, 0.1, -1.0],
+            [-0.2, 0.1, -1.0],
+            [-0.2, 0.1, -1.0],
+            [0.1, 0.3, -1.0],
+            [0.1, 0.3, -2.0],
+            [-0.2, 0.1, -1.0],
+            [-0.2, 0.1, -1.0],
+        ],
+        minterpolate::InterpolationFunction::CatmullRomSpline,
         false,
     );
 
     let camera_focus_sequence: Sequence<[f32; 3]> = Sequence::new(
         vec![0.0, 1.0, 3.0, 4.0, 5.0, 8.0],
-        compute_cubic_spline_tangents(
-            vec![
-                Vec3::new(-0.2, 0.1, -1.0),
-                Vec3::new(-0.2, 0.1, -1.0),
-                Vec3::new(0.1, 0.3, -1.0),
-                Vec3::new(0.1, 0.3, -2.0),
-                Vec3::new(-0.2, 0.1, -1.0) * 0.7,
-                Vec3::new(-0.2, 0.1, -1.0),
-            ],
-            0.25),
-        minterpolate::InterpolationFunction::CubicSpline,
+        vec![
+            [-0.2, 0.1, -1.0],
+            [-0.2, 0.1, -1.0],
+            [-0.2, 0.1, -1.0],
+            [0.1, 0.3, -1.0],
+            [0.1, 0.3, -1.5],
+            [-0.2, 0.1, -1.0],
+            [-0.2, 0.1, -1.0],
+            [-0.2, 0.1, -1.0],
+        ],
+        minterpolate::InterpolationFunction::CatmullRomSpline,
+        false,
+    );
+    let camera_aperture_sequence: Sequence<f32> = Sequence::new(
+        vec![0.0, 1.0, 3.0, 4.0, 5.0, 8.0],
+        vec![
+            0.0225,
+            0.0225,
+            0.0225,
+            0.0125,
+            0.0125,
+            0.0225,
+            0.0125,
+            0.0125,
+        ],
+        minterpolate::InterpolationFunction::CatmullRomSpline,
         false,
     );
     let camera = ThinLensCamera::new(
         DIMS.0 as f32 / DIMS.1 as f32,
         60.0,
-        0.0225,
+        camera_aperture_sequence,
         camera_position_sequence,
         camera_lookat_sequence,
         Vec3::new(0.0, 1.0, 0.0),
