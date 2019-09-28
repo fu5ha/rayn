@@ -32,6 +32,7 @@ mod minterpolate_integration {
     use minterpolate::{ InterpolationFunction, InterpolationPrimitive };
     use super::*;
 
+    #[allow(dead_code)]
     pub fn compute_cubic_spline_tangents(inputs: Vec<Vec3>, factor: f32) -> Vec<[f32; 3]>
     {
         let mut output: Vec<Vec3> = Vec::new();

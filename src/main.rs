@@ -1,4 +1,4 @@
-use generic_array::typenum::U3;
+use generic_array::typenum::U2;
 use sdfu::SDF;
 
 mod animation;
@@ -230,10 +230,9 @@ fn main() {
 
     let (camera, world) = setup();
 
-
-    let mut film = Film::<U3>::new(
-        &[ChannelKind::Color, ChannelKind::Background, ChannelKind::Normal],
-        Extent2u::new(RES.0, RES.1));
+    let mut film = Film::<U2>::new(
+        &[ChannelKind::Color, ChannelKind::Background],
+        Extent2u::new(RES.0, RES.1)).unwrap();
 
     let frame_rate = 24;
     let frame_range = 0..1;
@@ -263,9 +262,10 @@ fn main() {
         println!("Post processing image...");
 
         film.save_to(
+            &[ChannelKind::Color, ChannelKind::Alpha],
             "renders",
             format!("frame{}", frame),
             false,
-        );
+        ).unwrap();
     }
 }

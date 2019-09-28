@@ -13,151 +13,252 @@ use crate::world::World;
 use std::sync::{ atomic::{ AtomicUsize, Ordering }, Mutex };
 use std::ops::Range;
 use std::cell::UnsafeCell;
+use std::collections::HashMap;
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub enum ChannelKind {
-    Color,
-    Background,
-    Normal,
-}
+macro_rules! declare_channels {
+    {   
+        $($name:ident => {
+            storage: $storage:ident,
+            init: $initialize:expr,
+        }),+
+    } => {
+        #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+        pub enum ChannelKind {
+            $($name,)+
+        }
 
-impl ChannelKind {
-    pub fn channel_size(&self) -> usize {
-        match *self {
-            ChannelKind::Color => 4,
-            ChannelKind::Background => 3,
-            ChannelKind::Normal => 3,
+        pub enum ChannelStorage {
+            $($name(Vec<$storage>),)+
+        }
+
+        impl ChannelStorage {
+            pub fn kind(&self) -> ChannelKind {
+                match *self {
+                    $( ChannelStorage::$name(_) => ChannelKind::$name, )+
+                }
+            }
+
+            pub fn copy_from_tile(&mut self, other: &ChannelStorage, full_res: Extent2u, tile_bounds: Aabru) -> Result<(), ()> {
+                let extent = tile_bounds.size();
+                match (self, other) {
+                    $( (ChannelStorage::$name(this_buf), ChannelStorage::$name(tile_buf)) => {
+                        for x in 0..extent.w {
+                            for y in 0..extent.h {
+                                let tile_idx = x + y * extent.w;
+                                let this_idx = (tile_bounds.min.x + x) + (tile_bounds.min.y + y) * full_res.w;
+                                this_buf[this_idx] = tile_buf[tile_idx];
+                            }
+                        }
+                        Ok(())
+                    }, )+
+                    _ => Err(())
+                }
+            }
+        }
+
+        pub enum ChannelRefMut<'a> {
+            $($name(&'a mut [$storage]),)+
+        }
+
+        impl<'a> ChannelRefMut<'a> {
+            pub fn from_storage_mut(storage: &'a mut ChannelStorage) -> Self {
+                match storage {
+                    $( ChannelStorage::$name(buf) => ChannelRefMut::$name(buf.as_mut()), )+
+                }
+            }
+        }
+
+        trait ChannelInit {
+            fn init() -> Self;
+        }
+
+        impl ChannelStorage {
+            fn new(kind: ChannelKind, res: Extent2u) -> Self {
+                use ChannelKind::*;
+                match kind {
+                    $($name => Self::$name(vec![$initialize; res.w * res.h]),)+
+                }
+            }
         }
     }
 }
 
-pub type Channel = (ChannelKind, Vec<f32>);
-pub type UnsafeChannel = (ChannelKind, UnsafeCell<Vec<f32>>);
+declare_channels! {
+    Color => {
+        storage: Xyz,
+        init: Xyz::zero(),
+    },
+    Alpha => {
+        storage: f32,
+        init: 0f32,
+    },
+    Background => {
+        storage: Xyz,
+        init: Xyz::zero(),
+    },
+    WorldNormal => {
+        storage: Vec3,
+        init: Vec3::zero(),
+    }
+}
 
-pub type ChannelTileMut<'a> = (ChannelKind, &'a mut [f32]);
+macro_rules! channel_storage_index {
+    ($storage:expr, $channel:ident, $idx:expr) => {
+        if let ChannelStorage::$channel(x) = &$storage[$idx] {
+            x
+        } else {
+            panic!("Attempted to index into channel storage array with wrong channel type.");
+        }
+    }
+}
 
-unsafe impl<N: ArrayLength<UnsafeChannel>> Send for Tile<N> {}
-unsafe impl<N: ArrayLength<UnsafeChannel>> Sync for Tile<N> {}
+pub type UnsafeChannelStorage = UnsafeCell<ChannelStorage>;
 
-pub struct Tile<N: ArrayLength<UnsafeChannel>> {
+unsafe impl<N: ArrayLength<UnsafeChannelStorage>> Send for Tile<N> {}
+unsafe impl<N: ArrayLength<UnsafeChannelStorage>> Sync for Tile<N> {}
+
+pub struct Tile<N: ArrayLength<UnsafeChannelStorage>> {
     epoch: AtomicUsize,
-    channels: GenericArray<UnsafeChannel, N>,
+    channels: GenericArray<UnsafeChannelStorage, N>,
     pixel_bounds: Aabru,
     uv_bounds: Aabr,
 }
 
-pub struct Film<N: ArrayLength<Channel> + ArrayLength<UnsafeChannel>> {
-    channels: Mutex<GenericArray<Channel, N>>,
+pub struct Film<N: ArrayLength<ChannelStorage> + ArrayLength<UnsafeChannelStorage>> {
+    channel_indices: HashMap<ChannelKind, usize>,
+    channels: Mutex<GenericArray<ChannelStorage, N>>,
     tiles: Vec<Tile<N>>,
     progressive_epoch: usize,
     this_epoch_tiles_finished: AtomicUsize,
     res: Extent2u,
 }
 
-impl<'a, N: ArrayLength<Channel> + ArrayLength<UnsafeChannel>> Film <N> { 
+impl<'a, N: ArrayLength<ChannelStorage> + ArrayLength<UnsafeChannelStorage>> Film <N> { 
     pub fn new(
         channels: &[ChannelKind],
         res: Extent2u,
-    ) -> Self {
-        Film {
+    ) -> Result<Self, String> {
+        let mut channel_indices = HashMap::new();
+        for (i, kind) in channels.iter().enumerate() {
+            if let Some(_) = channel_indices.insert(*kind, i) {
+                return Err(String::from(format!("Attempted to create multiple {:?} channels", *kind)));
+            }
+        }
+        Ok(Film {
+            channel_indices,
             channels: Mutex::new(GenericArray::from_exact_iter(channels.into_iter().map(|kind| {
-                let size = kind.channel_size();
-                (*kind, vec![0f32; size * res.w * res.h])
-            })).unwrap()),
+                ChannelStorage::new(*kind, res)
+            })).expect("Generic type length does not match the number of channels.")),
             tiles: Vec::new(),
             progressive_epoch: 0,
             this_epoch_tiles_finished: AtomicUsize::new(0),
             res,
-        }
+        })
     }
 
     pub fn save_to<P: AsRef<std::path::Path>, IS: Into<String>>(
         &self,
+        write_channels: &[ChannelKind],
         output_folder: P,
         base_name: IS,
         transparent_background: bool,
-    ) {
+    ) -> Result<(), String> {
         let base_name = base_name.into();
+
         let channels = self.channels.lock().unwrap();
-        let (color_idx, bg_idx) = channels
-            .iter()
-            .enumerate()
-            .fold((None, None), |(mut color_idx, mut bg_idx), (i, (kind, _))| {
-                match *kind {
-                    ChannelKind::Color => color_idx = Some(i),
-                    ChannelKind::Background => bg_idx = Some(i),
-                    _ => (),
-                }
-                (color_idx, bg_idx)
-            });
 
-        match (color_idx, bg_idx, transparent_background) {
-            (Some(color_idx), _, true) => {
-                let color_buf = &channels[color_idx].1;
-                let mut img = image::RgbaImage::new(self.res.w as u32, self.res.h as u32);
-                for (x, y, pixel) in img.enumerate_pixels_mut() {
-                    let idx = (x as usize + (self.res.h - 1 - y as usize) * self.res.w) * 4;
-                    let a = color_buf[idx + 3];
-                    let rgb = Rgb::from(Xyz::new(color_buf[idx], color_buf[idx + 1], color_buf[idx + 2]).gamma_corrected(2.2)) * a;
-                    *pixel = image::Rgba([
-                        (rgb.r * 255.0).min(255.0).max(0.0) as u8,
-                        (rgb.g * 255.0).min(255.0).max(0.0) as u8,
-                        (rgb.b * 255.0).min(255.0).max(0.0) as u8,
-                        (a * 255.0).min(255.0).max(0.0) as u8,
-                    ]);
-                }
-                let filename = output_folder.as_ref().join(format!("{}_color.png", base_name.clone()));
-                println!("Saving to {}...", filename.display());
-                img.save(filename).unwrap();
-            },
-            (Some(color_idx), Some(bg_idx), false) => {
-                let color_buf = &channels[color_idx].1;
-                let bg_buf = &channels[bg_idx].1;
-                let mut img = image::RgbImage::new(self.res.w as u32, self.res.h as u32);
-                for (x, y, pixel) in img.enumerate_pixels_mut() {
-                    let i = x as usize + (self.res.h - 1 - y as usize) * self.res.w;
-                    let col_idx = i * 4;
-                    let bg_idx = i * 3;
-                    let col = Xyz::new(color_buf[col_idx], color_buf[col_idx + 1], color_buf[col_idx + 2]);
-                    let bg = Xyz::new(bg_buf[bg_idx], bg_buf[bg_idx + 1], bg_buf[bg_idx + 2]);
-                    let col = (col + bg).gamma_corrected(2.2);
-                    let rgb = Rgb::from(col);
-                    *pixel = image::Rgb([
-                        (rgb.r * 255.0).min(255.0).max(0.0) as u8,
-                        (rgb.g * 255.0).min(255.0).max(0.0) as u8,
-                        (rgb.b * 255.0).min(255.0).max(0.0) as u8,
-                    ]);
-                }
-                let filename = output_folder.as_ref().join(format!("{}_color.png", base_name.clone()));
-                println!("Saving to {}...", filename.display());
-                img.save(filename).unwrap();
-            },
-            (Some(color_idx), None, false) => {
-                let color_buf = &channels[color_idx].1;
-                let mut img = image::RgbImage::new(self.res.w as u32, self.res.h as u32);
-                for (x, y, pixel) in img.enumerate_pixels_mut() {
-                    let idx = (x as usize + (self.res.h - 1 - y as usize) * self.res.w) * 4;
-                    let rgb = Rgb::from(Xyz::new(color_buf[idx], color_buf[idx + 1], color_buf[idx + 2]).gamma_corrected(2.2));
-                    *pixel = image::Rgb([
-                        (rgb.r * 255.0).min(255.0).max(0.0) as u8,
-                        (rgb.g * 255.0).min(255.0).max(0.0) as u8,
-                        (rgb.b * 255.0).min(255.0).max(0.0) as u8,
-                    ]);
-                }
-                let filename = output_folder.as_ref().join(format!("{}_color.png", base_name.clone()));
-                println!("Saving to {}...", filename.display());
-                img.save(filename).unwrap();
-            },
-            _ => (),
-        }
-
-        for (kind, buf) in channels.iter() {
+        for kind in write_channels.iter() {
             match *kind {
-                ChannelKind::Normal => {
+                ChannelKind::Color => {
+                    let color_idx = self.channel_indices.get(&ChannelKind::Color);
+                    let alpha_idx = self.channel_indices.get(&ChannelKind::Alpha);
+                    let bg_idx = self.channel_indices.get(&ChannelKind::Background);
+
+                    match (color_idx, alpha_idx, bg_idx, transparent_background) {
+                        (Some(&color_idx), Some(&alpha_idx), _, true) => {
+                            let color_buf = &channel_storage_index!(channels, Color, color_idx);
+                            let alpha_buf = &channel_storage_index!(channels, Alpha, alpha_idx);
+                            let mut img = image::RgbaImage::new(self.res.w as u32, self.res.h as u32);
+                            for (x, y, pixel) in img.enumerate_pixels_mut() {
+                                let idx = x as usize + (self.res.h - 1 - y as usize) * self.res.w;
+                                let col = color_buf[idx];
+                                let a = alpha_buf[idx];
+                                let rgb = Rgb::from(col).gamma_corrected(2.2) * a;
+                                *pixel = image::Rgba([
+                                    (rgb.r * 255.0).min(255.0).max(0.0) as u8,
+                                    (rgb.g * 255.0).min(255.0).max(0.0) as u8,
+                                    (rgb.b * 255.0).min(255.0).max(0.0) as u8,
+                                    (a * 255.0).min(255.0).max(0.0) as u8,
+                                ]);
+                            }
+                            let filename = output_folder.as_ref().join(format!("{}_color.png", base_name.clone()));
+                            println!("Saving to {}...", filename.display());
+                            img.save(filename).unwrap();
+                        },
+                        (Some(&color_idx), _, Some(&bg_idx), false) => {
+                            let color_buf = channel_storage_index!(channels, Color, color_idx);
+                            let bg_buf = channel_storage_index!(channels, Background, bg_idx);
+                            let mut img = image::RgbImage::new(self.res.w as u32, self.res.h as u32);
+                            for (x, y, pixel) in img.enumerate_pixels_mut() {
+                                let i = x as usize + (self.res.h - 1 - y as usize) * self.res.w;
+                                let col = color_buf[i];
+                                let bg = bg_buf[i];
+                                let rgb = Rgb::from(col + bg).gamma_corrected(2.2);
+                                *pixel = image::Rgb([
+                                    (rgb.r * 255.0).min(255.0).max(0.0) as u8,
+                                    (rgb.g * 255.0).min(255.0).max(0.0) as u8,
+                                    (rgb.b * 255.0).min(255.0).max(0.0) as u8,
+                                ]);
+                            }
+                            let filename = output_folder.as_ref().join(format!("{}_color.png", base_name.clone()));
+                            println!("Saving to {}...", filename.display());
+                            img.save(filename).unwrap();
+                        },
+                        (Some(&color_idx), _, None, false) => {
+                            let color_buf = channel_storage_index!(channels, Color, color_idx);
+                            let mut img = image::RgbImage::new(self.res.w as u32, self.res.h as u32);
+                            for (x, y, pixel) in img.enumerate_pixels_mut() {
+                                let idx = x as usize + (self.res.h - 1 - y as usize) * self.res.w;
+                                let rgb = Rgb::from(color_buf[idx]).gamma_corrected(2.2);
+                                *pixel = image::Rgb([
+                                    (rgb.r * 255.0).min(255.0).max(0.0) as u8,
+                                    (rgb.g * 255.0).min(255.0).max(0.0) as u8,
+                                    (rgb.b * 255.0).min(255.0).max(0.0) as u8,
+                                ]);
+                            }
+                            let filename = output_folder.as_ref().join(format!("{}_color.png", base_name.clone()));
+                            println!("Saving to {}...", filename.display());
+                            img.save(filename).unwrap();
+                        },
+                        _ => return Err(String::from("Attempted to write Color channel with insufficient channels")),
+                    }
+                },
+                ChannelKind::Background => {
+                    let idx = *self.channel_indices.get(&ChannelKind::Background)
+                        .ok_or(String::from("Attempted to write Background channel but it didn't exist"))?;
+                    let buf = channel_storage_index!(channels, Background, idx);
                     let mut img = image::RgbImage::new(self.res.w as u32, self.res.h as u32);
                     for (x, y, pixel) in img.enumerate_pixels_mut() {
-                        let idx = (x as usize + (self.res.h - 1 - y as usize) * self.res.w) * 3;
-                        let vec = Vec3::new(buf[idx], buf[idx + 1], buf[idx + 2]);
+                        let idx = x as usize + (self.res.h - 1 - y as usize) * self.res.w;
+                        let rgb = Rgb::from(buf[idx]).gamma_corrected(2.2);
+                        *pixel = image::Rgb([
+                            (rgb.r * 255.0).min(255.0).max(0.0) as u8,
+                            (rgb.g * 255.0).min(255.0).max(0.0) as u8,
+                            (rgb.b * 255.0).min(255.0).max(0.0) as u8,
+                        ]);
+                    }
+                    let filename = output_folder.as_ref().join(format!("{}_background.png", base_name.clone()));
+                    println!("Saving to {}...", filename.display());
+                    img.save(filename).unwrap();
+                },
+                ChannelKind::WorldNormal => {
+                    let idx = *self.channel_indices.get(&ChannelKind::WorldNormal)
+                        .ok_or(String::from("Attempted to write WorldNormal channel but it didn't exist"))?;
+                    let buf = channel_storage_index!(channels, WorldNormal, idx);
+                    let mut img = image::RgbImage::new(self.res.w as u32, self.res.h as u32);
+                    for (x, y, pixel) in img.enumerate_pixels_mut() {
+                        let idx = x as usize + (self.res.h - 1 - y as usize) * self.res.w;
+                        let vec = buf[idx];
                         let rgb = Rgb::from(vec * 0.5 + Vec3::new(0.5, 0.5, 0.5));
                         *pixel = image::Rgb([
                             (rgb.r * 255.0).min(255.0).max(0.0) as u8,
@@ -169,13 +270,29 @@ impl<'a, N: ArrayLength<Channel> + ArrayLength<UnsafeChannel>> Film <N> {
                     println!("Saving to {}...", filename.display());
                     img.save(filename).unwrap();
                 },
-                _ => (),
+                ChannelKind::Alpha => {
+                    let idx = *self.channel_indices.get(&ChannelKind::Alpha)
+                        .ok_or(String::from("Attempted to write Alpha channel but it didn't exist"))?;
+                    let buf = channel_storage_index!(channels, Alpha, idx);
+                    let mut img = image::GrayImage::new(self.res.w as u32, self.res.h as u32);
+                    for (x, y, pixel) in img.enumerate_pixels_mut() {
+                        let idx = x as usize + (self.res.h - 1 - y as usize) * self.res.w;
+                        let a = buf[idx];
+                        *pixel = image::Luma([
+                            (a * 255.0).min(255.0).max(0.0) as u8,
+                        ]);
+                    }
+                    let filename = output_folder.as_ref().join(format!("{}_alpha.png", base_name.clone()));
+                    println!("Saving to {}...", filename.display());
+                    img.save(filename).unwrap();
+                },
             }
         }
+        Ok(())
     }
 }
 
-impl<'a, N: ArrayLength<Channel> + ArrayLength<UnsafeChannel> + ArrayLength<ChannelTileMut<'a>>> Film<N>  {
+impl<'a, N: ArrayLength<ChannelStorage> + ArrayLength<UnsafeChannelStorage> + ArrayLength<ChannelRefMut<'a>>> Film<N>  {
     pub fn render_frame_into<I: Integrator, S: IsSpectrum>(
         &'a mut self,
         world: &World<S>,
@@ -212,9 +329,8 @@ impl<'a, N: ArrayLength<Channel> + ArrayLength<UnsafeChannel> + ArrayLength<Chan
                         max: uv_end
                     };
 
-                    let tile_channels = GenericArray::from_exact_iter(channels.iter().map(|(kind, _)| {
-                        let size = kind.channel_size();
-                        (*kind, UnsafeCell::new(vec![0f32; size * actual_tile_size.w * actual_tile_size.h]))
+                    let tile_channels = GenericArray::from_exact_iter(channels.iter().map(|channel| {
+                        UnsafeCell::new(ChannelStorage::new(channel.kind(), actual_tile_size))
                     })).unwrap();
 
                     self.tiles.push(Tile {
@@ -238,7 +354,7 @@ impl<'a, N: ArrayLength<Channel> + ArrayLength<UnsafeChannel> + ArrayLength<Chan
             for x in 0..tile_extent.w {
                 for y in 0..tile_extent.h {
                     let mut col_spect = S::zero();
-                    let mut col_a = 0.0;
+                    let mut a = 0.0;
                     let mut back_spect = S::zero();
                     let mut normals = Vec3::zero();
                     for _ in 0..samples {
@@ -256,7 +372,7 @@ impl<'a, N: ArrayLength<Channel> + ArrayLength<UnsafeChannel> + ArrayLength<Chan
                             ray,
                             time,
                             &mut col_spect,
-                            &mut col_a,
+                            &mut a,
                             &mut back_spect,
                             &mut normals,
                             &mut rng,
@@ -264,32 +380,24 @@ impl<'a, N: ArrayLength<Channel> + ArrayLength<UnsafeChannel> + ArrayLength<Chan
                     }
 
                     col_spect = col_spect / samples as f32;
-                    col_a = col_a / samples as f32;
+                    a = a / samples as f32;
                     back_spect = back_spect / samples as f32;
                     normals /= samples as f32;
 
-                    for (kind, buf) in tile.iter_mut() {
-                        let size = kind.channel_size();
-                        let base_idx = (x + y * tile_extent.w) * size;
-                        use ChannelKind::*;
-                        match *kind {
-                            Color => {
-                                let col_xyz: Xyz = col_spect.into();
-                                buf[base_idx] = col_xyz.x;
-                                buf[base_idx + 1] = col_xyz.y;
-                                buf[base_idx + 2] = col_xyz.z;
-                                buf[base_idx + 3] = col_a;
+                    let idx = x + y * tile_extent.w;
+                    for channel_ref in tile.iter_mut() {
+                        match channel_ref {
+                            ChannelRefMut::Color(buf) => {
+                                buf[idx] = col_spect.into();
                             },
-                            Background => {
-                                let back_xyz: Xyz = back_spect.into();
-                                buf[base_idx] = back_xyz.x;
-                                buf[base_idx + 1] = back_xyz.y;
-                                buf[base_idx + 2] = back_xyz.z;
+                            ChannelRefMut::Alpha(buf) => {
+                                buf[idx] = a;
                             },
-                            Normal => {
-                                buf[base_idx] = normals.x;
-                                buf[base_idx + 1] = normals.y;
-                                buf[base_idx + 2] = normals.z;
+                            ChannelRefMut::Background(buf) => {
+                                buf[idx] = back_spect.into();
+                            },
+                            ChannelRefMut::WorldNormal(buf) => {
+                                buf[idx] = normals;
                             }
                         }
                     }
@@ -299,19 +407,18 @@ impl<'a, N: ArrayLength<Channel> + ArrayLength<UnsafeChannel> + ArrayLength<Chan
     }
 
     fn integrate_tiles<F>(&'a mut self, integrate_tile: F)
-        where F: FnOnce(GenericArray<ChannelTileMut<'a>, N>, Extent2u, Aabr) + Send + Sync + Copy
+        where F: FnOnce(GenericArray<ChannelRefMut<'a>, N>, Extent2u, Aabr) + Send + Sync + Copy
     {
         let tile_infos = self
             .tiles
             .iter()
             .enumerate()
             .map(|(idx, Tile { channels, pixel_bounds, uv_bounds, .. }) | {
-                let tile_channels = GenericArray::from_exact_iter(channels.iter().map(|(kind, buf)| {
+                let tile_channels = GenericArray::from_exact_iter(channels.iter().map(|channel| {
                     // Safe because we guarantee that nobody else is accessing this specific
                     // slice at the same time, and we do not modify or read the underlying Vec
                     // until after this ref goes out of scope.
-                    let vec = unsafe { &mut *buf.get() };
-                    (*kind, vec.as_mut())
+                    ChannelRefMut::from_storage_mut(unsafe { &mut *channel.get() })
                 })).unwrap();
 
                 (idx, tile_channels, pixel_bounds.size(), *uv_bounds)
@@ -362,25 +469,12 @@ impl<'a, N: ArrayLength<Channel> + ArrayLength<UnsafeChannel> + ArrayLength<Chan
         let mut channels = self.channels.lock().unwrap();
 
         let Tile { channels: tile_channels, pixel_bounds: tile_bounds, .. } = tile;
-        let extent = tile.pixel_bounds.size();
 
         for (tile_channel, channel) in tile_channels.iter().zip(channels.iter_mut()) {
-            assert!(tile_channel.0 == channel.0);
-            let size = tile_channel.0.channel_size();
             // Safe because we guarantee that we won't start modifying this chunk again
             // until the next epoch.
-            let tile_channel = unsafe { &*tile_channel.1.get() };
-            for x in 0..extent.w {
-                for y in 0..extent.h {
-                    let tile_base_idx = (x + y * extent.w) * size;
-                    let channel_base_idx = ((tile_bounds.min.x + x) + (tile_bounds.min.y + y) * self.res.w) * size;
-                    for offset in 0..size {
-                        let tile_idx = tile_base_idx + offset;
-                        let channel_idx = channel_base_idx + offset;
-                        channel.1[channel_idx] = tile_channel[tile_idx];
-                    }
-                }
-            }
+            let tile_channel = unsafe { &*tile_channel.get() };
+            channel.copy_from_tile(tile_channel, self.res, *tile_bounds).unwrap();
         }
     }
 }

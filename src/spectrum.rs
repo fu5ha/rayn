@@ -32,6 +32,9 @@ impl Rgb {
         Rgb(VekRgb::new(r, g, b))
     }
 
+    pub fn gamma_corrected(&mut self, gamma: f32) -> Self {
+        Rgb(self.0.map(|x| x.powf(1.0 / gamma)))
+    }
 }
 
 impl Deref for Rgb {
@@ -53,10 +56,12 @@ impl Deref for Xyz {
 }
 
 impl Xyz {
+    #[allow(dead_code)]
     pub fn new(x: f32, y: f32, z: f32) -> Self {
         Xyz(Vec3::new(x, y, z))
     }
 
+    #[allow(dead_code)]
     pub fn gamma_corrected(&mut self, gamma: f32) -> Self {
         Xyz(self.0.map(|x| x.powf(1.0 / gamma)))
     }
@@ -75,9 +80,9 @@ impl From<Rgb> for Xyz {
 impl From<Xyz> for Rgb {
     fn from(xyz: Xyz) -> Self {
         Rgb::new(
-            3.240479*xyz.x - 1.537150*xyz.y - 0.498535*xyz.z,
+             3.240479*xyz.x - 1.537150*xyz.y - 0.498535*xyz.z,
             -0.969256*xyz.x + 1.875991*xyz.y + 0.041556*xyz.z,
-            0.055648*xyz.x - 0.204043*xyz.y + 1.057311*xyz.z,
+             0.055648*xyz.x - 0.204043*xyz.y + 1.057311*xyz.z,
         )
     }
 }

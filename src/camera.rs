@@ -36,6 +36,7 @@ pub struct PinholeCamera<TR> {
 }
 
 impl<TR> PinholeCamera<TR> {
+    #[allow(dead_code)]
     pub fn new(aspect_ratio: f32, transform_sequence: TR) -> Self {
         PinholeCamera {
             lower_left: Vec3::new(-aspect_ratio * 0.5, -0.5, -1.0),
