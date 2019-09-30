@@ -1,3 +1,5 @@
+use vek::{ Clamp };
+
 use crate::math::Vec3;
 use std::fmt::Debug;
 use std::iter::*;
@@ -46,8 +48,12 @@ impl Rgb {
         Rgb(VekRgb::new(r, g, b))
     }
 
-    pub fn gamma_corrected(&mut self, gamma: f32) -> Self {
+    pub fn gamma_corrected(&self, gamma: f32) -> Self {
         Rgb(self.0.map(|x| x.powf(1.0 / gamma)))
+    }
+
+    pub fn saturated(&self) -> Rgb {
+        Rgb(self.0.map(|x| Clamp::clamped01(x)))
     }
 }
 
@@ -75,8 +81,13 @@ impl Xyz {
     }
 
     #[allow(dead_code)]
-    pub fn gamma_corrected(&mut self, gamma: f32) -> Self {
+    pub fn gamma_corrected(&self, gamma: f32) -> Self {
         Xyz(self.0.map(|x| x.powf(1.0 / gamma)))
+    }
+
+    #[allow(dead_code)]
+    pub fn saturated(&self) -> Self {
+        Xyz(self.0.map(|x| Clamp::clamped01(x)))
     }
 }
 
