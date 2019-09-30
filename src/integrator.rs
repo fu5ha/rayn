@@ -1,11 +1,11 @@
-use dynamic_arena::{ DynamicArena, NonSend };
+use dynamic_arena::{DynamicArena, NonSend};
 use rand::prelude::*;
 
-use crate::spectrum::{ IsSpectrum, Xyz, Rgb };
-use crate::world::World;
-use crate::ray::Ray;
 use crate::hitable::Hitable;
-use crate::math::{ Vec3 };
+use crate::math::Vec3;
+use crate::ray::Ray;
+use crate::spectrum::{IsSpectrum, Rgb, Xyz};
+use crate::world::World;
 
 pub trait Integrator: Send + Sync {
     fn integrate<S: IsSpectrum>(
@@ -18,7 +18,7 @@ pub trait Integrator: Send + Sync {
         back_spect: &mut S,
         normals: &mut Vec3,
         rng: &mut ThreadRng,
-        arena: &DynamicArena<'_, NonSend>
+        arena: &DynamicArena<'_, NonSend>,
     );
 }
 
@@ -38,7 +38,7 @@ impl Integrator for PathTracingIntegrator {
         back_luminance: &mut S,
         normals: &mut Vec3,
         rng: &mut ThreadRng,
-        arena: &DynamicArena<'_, NonSend>
+        arena: &DynamicArena<'_, NonSend>,
     ) {
         let mut throughput = S::one();
         for bounce in 0.. {
@@ -71,7 +71,12 @@ impl Integrator for PathTracingIntegrator {
                 let dir = ray.dir();
                 let t = 0.5 * (dir.y + 1.0);
 
-                let l = throughput * S::from(Xyz::from(Rgb::from(Vec3::lerp(Vec3::one(), Vec3::new(0.5, 0.7, 1.0), t))));
+                let l = throughput
+                    * S::from(Xyz::from(Rgb::from(Vec3::lerp(
+                        Vec3::one(),
+                        Vec3::new(0.5, 0.7, 1.0),
+                        t,
+                    ))));
                 if bounce == 0 {
                     *back_luminance += l;
                 } else {

@@ -1,8 +1,8 @@
 use rand::prelude::*;
 
-use crate::math::{ Vec2, Vec3, Transform, RandomSample2d };
-use crate::ray::Ray;
 use crate::animation::Sequenced;
+use crate::math::{RandomSample2d, Transform, Vec2, Vec3};
+use crate::ray::Ray;
 
 pub trait Camera: Send + Sync {
     fn get_ray(&self, uv: Vec2, time: f32, rng: &mut ThreadRng) -> Ray;
@@ -49,7 +49,10 @@ impl<TR> PinholeCamera<TR> {
 impl<TR: Sequenced<Transform>> Camera for PinholeCamera<TR> {
     fn get_ray(&self, uv: Vec2, time: f32, _rng: &mut ThreadRng) -> Ray {
         let transform = self.transform_sequence.sample_at(time);
-        Ray::new(transform.position, transform.orientation * (self.lower_left + self.full_size * uv).normalized())
+        Ray::new(
+            transform.position,
+            transform.orientation * (self.lower_left + self.full_size * uv).normalized(),
+        )
     }
 }
 
@@ -60,19 +63,11 @@ pub struct ThinLensCamera<A, O, LA, U, F> {
     origin: O,
     at: LA,
     up: U,
-    focus: F
+    focus: F,
 }
 
 impl<A, O, LA, U, F> ThinLensCamera<A, O, LA, U, F> {
-    pub fn new(
-        aspect: f32,
-        vfov: f32,
-        aperture: A,
-        origin: O,
-        at: LA,
-        up: U,
-        focus: F
-    ) -> Self {
+    pub fn new(aspect: f32, vfov: f32, aperture: A, origin: O, at: LA, up: U, focus: F) -> Self {
         let theta = vfov * std::f32::consts::PI / 180.0;
         let half_height = (theta / 2.0).tan();
         let half_width = aspect * half_height;
@@ -82,17 +77,18 @@ impl<A, O, LA, U, F> ThinLensCamera<A, O, LA, U, F> {
             origin,
             at,
             up,
-            focus
+            focus,
         }
     }
 }
 
 impl<A, O, LA, U, F> Camera for ThinLensCamera<A, O, LA, U, F>
-    where A: Sequenced<f32>,
-        O: Sequenced<Vec3>,
-        LA: Sequenced<Vec3>,
-        U: Sequenced<Vec3>,
-        F: Sequenced<Vec3>
+where
+    A: Sequenced<f32>,
+    O: Sequenced<Vec3>,
+    LA: Sequenced<Vec3>,
+    U: Sequenced<Vec3>,
+    F: Sequenced<Vec3>,
 {
     fn get_ray(&self, uv: Vec2, time: f32, rng: &mut ThreadRng) -> Ray {
         let origin = self.origin.sample_at(time);
@@ -117,8 +113,6 @@ impl<A, O, LA, U, F> Camera for ThinLensCamera<A, O, LA, U, F>
         let offset = basis_u * rd.x + basis_v * rd.y;
 
         let origin = origin + offset;
-        Ray::new(
-            origin,
-            (lower_left + horiz + verti - origin).normalized())
+        Ray::new(origin, (lower_left + horiz + verti - origin).normalized())
     }
 }

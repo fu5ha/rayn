@@ -1,7 +1,7 @@
 use crate::animation::Sequenced;
-use crate::hitable::{ Intersection, Hitable };
-use crate::material::{ MaterialHandle };
-use crate::math::{ Transform };
+use crate::hitable::{Hitable, Intersection};
+use crate::material::MaterialHandle;
+use crate::math::Transform;
 use crate::ray::Ray;
 
 pub struct Sphere<TR: Sequenced<Transform>> {
@@ -21,7 +21,12 @@ impl<TR: Sequenced<Transform>> Sphere<TR> {
 }
 
 impl<'a, TR: Sequenced<Transform>, S> Hitable<S> for Sphere<TR> {
-    fn hit(&self, ray: &Ray, time: f32, t_range: ::std::ops::Range<f32>) -> Option<Intersection<S>> {
+    fn hit(
+        &self,
+        ray: &Ray,
+        time: f32,
+        t_range: ::std::ops::Range<f32>,
+    ) -> Option<Intersection<S>> {
         let transform = self.transform_seq.sample_at(time);
         let origin = transform.position;
         let oc = ray.origin() - origin;

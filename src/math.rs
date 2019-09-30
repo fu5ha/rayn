@@ -34,7 +34,7 @@ impl OrthonormalBasis for Vec3 {
         let ks = nor.z.signum();
         let ka = 1.0 / (1.0 + nor.z.abs());
         let kb = -ks * nor.x * nor.y * ka;
-        let uu = Vec3::new(1.0 - nor.x * nor.x * ka, ks*kb, -ks*nor.x);
+        let uu = Vec3::new(1.0 - nor.x * nor.x * ka, ks * kb, -ks * nor.x);
         let vv = Vec3::new(kb, ks - nor.y * nor.y * ka * ks, -nor.y);
         Mat3 {
             cols: CVec3::new(uu, vv, nor),

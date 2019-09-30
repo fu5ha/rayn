@@ -1,5 +1,4 @@
-use crate::math::{ Vec2, Vec3, Vec4, Quat, Transform };
-
+use crate::math::{Quat, Transform, Vec2, Vec3, Vec4};
 
 /// A generic object which contains a property of type T which is sequenced over time.
 pub trait Sequenced<T>: Send + Sync {
@@ -24,17 +23,15 @@ impl<T, F: Fn(f32) -> T + Send + Sync> Sequenced<T> for F {
     }
 }
 
-
-#[cfg(feature="minterpolate")]
+#[cfg(feature = "minterpolate")]
 pub use minterpolate_integration::*;
-#[cfg(feature="minterpolate")]
+#[cfg(feature = "minterpolate")]
 mod minterpolate_integration {
-    use minterpolate::{ InterpolationFunction, InterpolationPrimitive };
     use super::*;
+    use minterpolate::{InterpolationFunction, InterpolationPrimitive};
 
     #[allow(dead_code)]
-    pub fn compute_cubic_spline_tangents(inputs: Vec<Vec3>, factor: f32) -> Vec<[f32; 3]>
-    {
+    pub fn compute_cubic_spline_tangents(inputs: Vec<Vec3>, factor: f32) -> Vec<[f32; 3]> {
         let mut output: Vec<Vec3> = Vec::new();
         for slice in inputs.windows(2) {
             let this: Vec3 = slice[0];
@@ -58,7 +55,7 @@ mod minterpolate_integration {
     pub struct Sequence<T: InterpolationPrimitive + Clone + Send + Sync> {
         /// The time at which the corresponding output should be reached.
         inputs: Vec<f32>,
-        /// The sampled value at the corresponding input time. Depending on the interpolation function, 
+        /// The sampled value at the corresponding input time. Depending on the interpolation function,
         /// there may be multiple outputs required for a single input (for example tangents of a spline).
         outputs: Vec<T>,
         /// How to interpolate between keys
@@ -69,12 +66,23 @@ mod minterpolate_integration {
     }
 
     impl<T: InterpolationPrimitive + Clone + Send + Sync> Sequence<T> {
-        pub fn new(inputs: Vec<f32>, outputs: Vec<T>, interpolation: InterpolationFunction<T>, normalize: bool) -> Self {
-            Sequence { inputs, outputs, interpolation, normalize }
+        pub fn new(
+            inputs: Vec<f32>,
+            outputs: Vec<T>,
+            interpolation: InterpolationFunction<T>,
+            normalize: bool,
+        ) -> Self {
+            Sequence {
+                inputs,
+                outputs,
+                interpolation,
+                normalize,
+            }
         }
 
         pub fn sample(&self, t: f32) -> T {
-            self.interpolation.interpolate(t, &self.inputs, &self.outputs, self.normalize)
+            self.interpolation
+                .interpolate(t, &self.inputs, &self.outputs, self.normalize)
         }
     }
 
@@ -105,7 +113,7 @@ pub struct TransformSequence<PS: Sequenced<Vec3>, OS: Sequenced<Quat>> {
 
 impl<PS: Sequenced<Vec3>, OS: Sequenced<Quat>> TransformSequence<PS, OS> {
     pub fn new(pos_seq: PS, ori_seq: OS) -> Self {
-        TransformSequence { pos_seq, ori_seq, }
+        TransformSequence { pos_seq, ori_seq }
     }
 }
 

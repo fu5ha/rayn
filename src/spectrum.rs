@@ -1,14 +1,28 @@
 use crate::math::Vec3;
-use std::ops::*;
-use std::iter::*;
 use std::fmt::Debug;
+use std::iter::*;
+use std::ops::*;
 
-pub trait IsSpectrum: 
-    Add<Self, Output=Self> + AddAssign<Self> + Sub<Self, Output=Self> + SubAssign<Self>
-    + Mul<Self, Output=Self> + MulAssign<Self>
-    + Mul<f32, Output=Self> + Div<f32, Output=Self> + DivAssign<f32>
+pub trait IsSpectrum:
+    Add<Self, Output = Self>
+    + AddAssign<Self>
+    + Sub<Self, Output = Self>
+    + SubAssign<Self>
+    + Mul<Self, Output = Self>
+    + MulAssign<Self>
+    + Mul<f32, Output = Self>
+    + Div<f32, Output = Self>
+    + DivAssign<f32>
     + Sum
-    + PartialEq + Sized + Clone + Copy + Debug + Into<Xyz> + From<Xyz> + Send + Sync
+    + PartialEq
+    + Sized
+    + Clone
+    + Copy
+    + Debug
+    + Into<Xyz>
+    + From<Xyz>
+    + Send
+    + Sync
 {
     fn zero() -> Self;
     fn one() -> Self;
@@ -44,7 +58,6 @@ impl Deref for Rgb {
     }
 }
 
-
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub struct Xyz(Vec3);
 
@@ -70,9 +83,9 @@ impl Xyz {
 impl From<Rgb> for Xyz {
     fn from(rgb: Rgb) -> Self {
         Xyz(Vec3 {
-            x: 0.412453*rgb.r + 0.357580*rgb.g + 0.180423*rgb.b,
-            y: 0.212671*rgb.r + 0.715160*rgb.g + 0.072169*rgb.b,
-            z: 0.019334*rgb.r + 0.119193*rgb.g + 0.950227*rgb.b
+            x: 0.412453 * rgb.r + 0.357580 * rgb.g + 0.180423 * rgb.b,
+            y: 0.212671 * rgb.r + 0.715160 * rgb.g + 0.072169 * rgb.b,
+            z: 0.019334 * rgb.r + 0.119193 * rgb.g + 0.950227 * rgb.b,
         })
     }
 }
@@ -80,13 +93,12 @@ impl From<Rgb> for Xyz {
 impl From<Xyz> for Rgb {
     fn from(xyz: Xyz) -> Self {
         Rgb::new(
-             3.240479*xyz.x - 1.537150*xyz.y - 0.498535*xyz.z,
-            -0.969256*xyz.x + 1.875991*xyz.y + 0.041556*xyz.z,
-             0.055648*xyz.x - 0.204043*xyz.y + 1.057311*xyz.z,
+            3.240479 * xyz.x - 1.537150 * xyz.y - 0.498535 * xyz.z,
+            -0.969256 * xyz.x + 1.875991 * xyz.y + 0.041556 * xyz.z,
+            0.055648 * xyz.x - 0.204043 * xyz.y + 1.057311 * xyz.z,
         )
     }
 }
-
 
 impl IsSpectrum for Xyz {
     fn zero() -> Self {
@@ -188,4 +200,3 @@ macro_rules! impl_wrapper_ops {
 
 impl_wrapper_ops!(Xyz);
 impl_wrapper_ops!(Rgb);
-
