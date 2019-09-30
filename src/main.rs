@@ -30,7 +30,7 @@ use world::World;
 use std::time::Instant;
 
 const RES: (usize, usize) = (1280, 720);
-const SAMPLES: usize = 128;
+const SAMPLES: usize = 32;
 
 type Spectrum = Xyz;
 
@@ -279,7 +279,7 @@ fn main() {
         println!("Post processing image...");
 
         film.save_to(
-            &[ChannelKind::Color, ChannelKind::Alpha],
+            &[ChannelKind::Color],
             "renders",
             format!("frame{}", frame),
             false,

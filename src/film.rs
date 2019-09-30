@@ -183,7 +183,7 @@ impl<'a, N: ArrayLength<ChannelStorage>, F> Film<N, F> {
                                 let idx = x as usize + (self.res.h - 1 - y as usize) * self.res.w;
                                 let col = color_buf[idx];
                                 let a = alpha_buf[idx];
-                                let rgb = Rgb::from(col).gamma_corrected(2.2) * a;
+                                let rgb = Rgb::from(col).saturated().gamma_corrected(2.2) * a;
                                 *pixel = image::Rgba([
                                     (rgb.r * 255.0).min(255.0).max(0.0) as u8,
                                     (rgb.g * 255.0).min(255.0).max(0.0) as u8,
@@ -206,7 +206,7 @@ impl<'a, N: ArrayLength<ChannelStorage>, F> Film<N, F> {
                                 let i = x as usize + (self.res.h - 1 - y as usize) * self.res.w;
                                 let col = color_buf[i];
                                 let bg = bg_buf[i];
-                                let rgb = Rgb::from(col + bg).gamma_corrected(2.2);
+                                let rgb = Rgb::from(col + bg).saturated().gamma_corrected(2.2);
                                 *pixel = image::Rgb([
                                     (rgb.r * 255.0).min(255.0).max(0.0) as u8,
                                     (rgb.g * 255.0).min(255.0).max(0.0) as u8,
@@ -257,7 +257,7 @@ impl<'a, N: ArrayLength<ChannelStorage>, F> Film<N, F> {
                     let mut img = image::RgbImage::new(self.res.w as u32, self.res.h as u32);
                     for (x, y, pixel) in img.enumerate_pixels_mut() {
                         let idx = x as usize + (self.res.h - 1 - y as usize) * self.res.w;
-                        let rgb = Rgb::from(buf[idx]).gamma_corrected(2.2);
+                        let rgb = Rgb::from(buf[idx]).saturated().gamma_corrected(2.2);
                         *pixel = image::Rgb([
                             (rgb.r * 255.0).min(255.0).max(0.0) as u8,
                             (rgb.g * 255.0).min(255.0).max(0.0) as u8,
