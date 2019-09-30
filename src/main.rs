@@ -4,6 +4,7 @@ use sdfu::SDF;
 mod animation;
 mod camera;
 mod film;
+mod filter;
 mod hitable;
 mod integrator;
 mod material;

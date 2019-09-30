@@ -5,6 +5,7 @@ use rand::distributions::Uniform;
 use rand::prelude::*;
 
 use crate::camera::CameraHandle;
+use crate::filter::Filter;
 use crate::integrator::Integrator;
 use crate::math::{Aabr, Aabru, Extent2u, Vec2, Vec2u, Vec3};
 use crate::spectrum::{IsSpectrum, Rgb, Xyz};
@@ -71,10 +72,6 @@ macro_rules! declare_channels {
             }
         }
 
-        trait ChannelInit {
-            fn init() -> Self;
-        }
-
         impl ChannelStorage {
             fn new(kind: ChannelKind, res: Extent2u) -> Self {
                 use ChannelKind::*;
@@ -115,28 +112,23 @@ macro_rules! channel_storage_index {
     };
 }
 
-pub type UnsafeChannelStorage = UnsafeCell<ChannelStorage>;
-
-unsafe impl<N: ArrayLength<UnsafeChannelStorage>> Send for Tile<N> {}
-unsafe impl<N: ArrayLength<UnsafeChannelStorage>> Sync for Tile<N> {}
-
-pub struct Tile<N: ArrayLength<UnsafeChannelStorage>> {
+pub struct Tile<N: ArrayLength<ChannelStorage>, F> {
     epoch: AtomicUsize,
-    channels: GenericArray<UnsafeChannelStorage, N>,
+    channels: GenericArray<ChannelStorage, N>,
     pixel_bounds: Aabru,
     uv_bounds: Aabr,
+    filter: F,
 }
 
-pub struct Film<N: ArrayLength<ChannelStorage> + ArrayLength<UnsafeChannelStorage>> {
+pub struct Film<N: ArrayLength<ChannelStorage>, F> {
     channel_indices: HashMap<ChannelKind, usize>,
     channels: Mutex<GenericArray<ChannelStorage, N>>,
-    tiles: Vec<Tile<N>>,
     progressive_epoch: usize,
     this_epoch_tiles_finished: AtomicUsize,
     res: Extent2u,
 }
 
-impl<'a, N: ArrayLength<ChannelStorage> + ArrayLength<UnsafeChannelStorage>> Film<N> {
+impl<'a, N: ArrayLength<ChannelStorage>, F> Film<N, F> {
     pub fn new(channels: &[ChannelKind], res: Extent2u) -> Result<Self, String> {
         let mut channel_indices = HashMap::new();
         for (i, kind) in channels.iter().enumerate() {
@@ -157,7 +149,6 @@ impl<'a, N: ArrayLength<ChannelStorage> + ArrayLength<UnsafeChannelStorage>> Fil
                 )
                 .expect("Generic type length does not match the number of channels."),
             ),
-            tiles: Vec::new(),
             progressive_epoch: 0,
             this_epoch_tiles_finished: AtomicUsize::new(0),
             res,
@@ -330,22 +321,22 @@ impl<'a, N: ArrayLength<ChannelStorage> + ArrayLength<UnsafeChannelStorage>> Fil
 
 impl<
         'a,
-        N: ArrayLength<ChannelStorage>
-            + ArrayLength<UnsafeChannelStorage>
-            + ArrayLength<ChannelRefMut<'a>>,
-    > Film<N>
+        N: ArrayLength<ChannelStorage> + ArrayLength<ChannelRefMut<'a>>,
+        F: Filter + Copy + Send + Sync,
+    > Film<N, F>
 {
     pub fn render_frame_into<I: Integrator, S: IsSpectrum>(
         &'a mut self,
         world: &World<S>,
         camera: CameraHandle,
         integrator: I,
+        filter: F,
         tile_size: Extent2u,
         time_range: Range<f32>,
         samples: usize,
     ) {
         let camera = world.cameras.get(camera);
-        self.tiles.clear();
+        let tiles = Vec::new();
 
         let rem = Vec2u::new((self.res.w) % tile_size.w, (self.res.h) % tile_size.h);
         {
@@ -376,23 +367,25 @@ impl<
                         max: uv_end,
                     };
 
-                    let tile_channels =
-                        GenericArray::from_exact_iter(channels.iter().map(|channel| {
-                            UnsafeCell::new(ChannelStorage::new(channel.kind(), actual_tile_size))
-                        }))
-                        .unwrap();
+                    let tile_channels = GenericArray::from_exact_iter(
+                        channels
+                            .iter()
+                            .map(|channel| ChannelStorage::new(channel.kind(), actual_tile_size)),
+                    )
+                    .unwrap();
 
-                    self.tiles.push(Tile {
+                    tiles.push(Tile {
                         epoch: AtomicUsize::new(0),
                         channels: tile_channels,
                         pixel_bounds: tile_bounds,
                         uv_bounds,
+                        filter,
                     });
                 }
             }
         }
 
-        self.integrate_tiles(|mut tile, tile_extent, uv_bounds| {
+        self.integrate_tiles(tiles, |mut tile| {
             let mut rng = rand::thread_rng();
             let uniform = Uniform::new(0.0, 1.0);
 
@@ -427,6 +420,8 @@ impl<
                             &mut rng,
                             &arena,
                         );
+
+                        tile.add_sample()
                     }
 
                     col_spect = col_spect / samples as f32;
@@ -456,49 +451,21 @@ impl<
         });
     }
 
-    fn integrate_tiles<F>(&'a mut self, integrate_tile: F)
+    fn integrate_tiles<FN>(&self, tiles: Vec<Tile<N, F>>, integrate_tile: FN)
     where
-        F: FnOnce(GenericArray<ChannelRefMut<'a>, N>, Extent2u, Aabr) + Send + Sync + Copy,
+        FN: FnOnce(&mut Tile<N, F>) + Send + Sync + Copy,
     {
-        let tile_infos = self
-            .tiles
-            .iter()
-            .enumerate()
-            .map(
-                |(
-                    idx,
-                    Tile {
-                        channels,
-                        pixel_bounds,
-                        uv_bounds,
-                        ..
-                    },
-                )| {
-                    let tile_channels =
-                        GenericArray::from_exact_iter(channels.iter().map(|channel| {
-                            // Safe because we guarantee that nobody else is accessing this specific
-                            // slice at the same time, and we do not modify or read the underlying Vec
-                            // until after this ref goes out of scope.
-                            ChannelRefMut::from_storage_mut(unsafe { &mut *channel.get() })
-                        }))
-                        .unwrap();
-
-                    (idx, tile_channels, pixel_bounds.size(), *uv_bounds)
-                },
-            )
-            .collect::<Vec<_>>();
-
-        let num_tiles = self.tiles.len();
+        let num_tiles = tiles.len();
 
         {
             let epoch = self.progressive_epoch;
             let this = &*self;
             rayon::scope_fifo(|scope| {
-                for (tile_idx, tile_channels, pixel_size, uv_bounds) in tile_infos.into_iter() {
+                for (idx, tile) in tiles.into_iter().enumerate() {
                     scope.spawn_fifo(move |_| {
-                        integrate_tile(tile_channels, pixel_size, uv_bounds);
+                        integrate_tile(&mut tile);
 
-                        this.tile_finished(tile_idx, epoch)
+                        this.tile_finished(tile, num_tiles, idx)
                     })
                 }
             });
@@ -512,14 +479,16 @@ impl<
         self.progressive_epoch += 1;
     }
 
-    fn tile_finished(&self, tile_idx: usize, epoch: usize) {
-        let tile = &self.tiles[tile_idx];
+    fn tile_finished(&self, tile: Tile<N, F>, num_tiles: usize, tile_idx: usize) {
         let tile_epoch = tile.epoch.fetch_add(1, Ordering::Relaxed);
-        if epoch != tile_epoch {
-            panic!("Epoch mismatch! Expected: {}, got: {}", tile_epoch, epoch)
+        if self.progressive_epoch != tile_epoch {
+            panic!(
+                "Epoch mismatch! Expected: {}, got: {}",
+                self.progressive_epoch, tile_epoch
+            );
         }
 
-        let tile_percent = 1.0 / self.tiles.len() as f32 * 100.0;
+        let tile_percent = 1.0 / num_tiles as f32 * 100.0;
         let tile_percent_target = 5.0;
         let tile_divisor = (tile_percent_target / tile_percent).round() as usize;
 
@@ -541,9 +510,8 @@ impl<
         for (tile_channel, channel) in tile_channels.iter().zip(channels.iter_mut()) {
             // Safe because we guarantee that we won't start modifying this chunk again
             // until the next epoch.
-            let tile_channel = unsafe { &*tile_channel.get() };
             channel
-                .copy_from_tile(tile_channel, self.res, *tile_bounds)
+                .copy_from_tile(tile_channel, self.res, tile_bounds)
                 .unwrap();
         }
     }
