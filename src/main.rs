@@ -18,7 +18,7 @@ mod world;
 use animation::{Sequence, TransformSequence};
 use camera::{CameraHandle, CameraStore, ThinLensCamera};
 use film::{ChannelKind, Film};
-use filter::{BoxFilter, LanczosSincFilter};
+use filter::{BoxFilter, LanczosSincFilter, MitchellNetravaliFilter};
 use hitable::HitableStore;
 use integrator::PathTracingIntegrator;
 use material::{Checkerboard3d, Dielectric, Emissive, MaterialStore, Metal, Refractive};
@@ -31,7 +31,7 @@ use world::World;
 use std::time::Instant;
 
 const RES: (usize, usize) = (1280, 720);
-const SAMPLES: usize = 64;
+const SAMPLES: usize = 128;
 
 type Spectrum = Xyz;
 
@@ -259,7 +259,8 @@ fn main() {
         let frame_start = frame as f32 * (1.0 / frame_rate as f32);
         let frame_end = frame_start + shutter_speed;
 
-        let filter = LanczosSincFilter::new(3.0, 3.0);
+        let filter = MitchellNetravaliFilter::new(2.0, 1.0 / 3.0, 1.0 / 3.0);
+        // let filter = LanczosSincFilter::new(3.0, 3.0);
         // let filter = BoxFilter::new(0.5);
 
         film.render_frame_into(
@@ -286,7 +287,7 @@ fn main() {
         film.save_to(
             &[ChannelKind::Color],
             "renders",
-            format!("frame{}_lanczos", frame),
+            format!("frame{}_mitchell", frame),
             false,
         )
         .unwrap();
