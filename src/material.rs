@@ -11,40 +11,39 @@ pub trait BSDF<S: IsSpectrum>: Send + Sync {
     fn scatter(
         &self,
         wo: Vec3,
-        intersection: &mut Intersection<S>,
+        intersection: &mut Intersection,
         rng: &mut ThreadRng,
     ) -> Option<ScatteringEvent<S>>;
     fn bsdf_pdf(
         &self,
         wo: Vec3,
         wi: Vec3,
-        intersection: &mut Intersection<S>,
+        intersection: &mut Intersection,
         rng: &mut ThreadRng,
     ) -> (S, f32);
-    fn le(&self, _wo: Vec3, _intersection: &mut Intersection<S>) -> S {
+    fn le(&self, _wo: Vec3, _intersection: &mut Intersection) -> S {
         S::zero()
     }
 }
 
 pub trait Material<S: IsSpectrum>: Send + Sync {
-    fn setup_scattering_functions<'i, 'a: 'i>(
+    fn setup_scattering_functions<'bsdf, 'arena: 'bsdf>(
         &self,
-        intersection: &mut Intersection<'i, S>,
-        arena: &'a DynamicArena<'_, NonSend>,
-    );
+        intersection: &mut Intersection,
+        arena: &'arena DynamicArena<'_, NonSend>,
+    ) -> &'bsdf dyn BSDF<S>;
 }
 
 macro_rules! impl_mat_copy {
     ($t:ident) => {
         impl<S: IsSpectrum> Material<S> for $t<S> {
-            fn setup_scattering_functions<'i, 'a: 'i>(
+            fn setup_scattering_functions<'bsdf, 'arena: 'bsdf>(
                 &self,
-                intersection: &mut Intersection<'i, S>,
-                arena: &'a DynamicArena<'_, NonSend>,
-            ) {
-                let bsdf = arena.alloc_copy(*self);
-                let bsdf_ptr = intersection.bsdf.as_mut_ptr();
-                unsafe { *bsdf_ptr = bsdf };
+                _intersection: &mut Intersection,
+                arena: &'arena DynamicArena<'_, NonSend>,
+            ) -> &'bsdf dyn BSDF<S> {
+                let bsdf: &mut $t<S> = arena.alloc_copy(*self);
+                &*bsdf
             }
         }
     };
@@ -90,10 +89,10 @@ impl<S> Dielectric<S> {
 }
 
 impl<S: IsSpectrum> BSDF<S> for Dielectric<S> {
-    fn scatter<'a>(
+    fn scatter(
         &self,
         wo: Vec3,
-        intersection: &mut Intersection<'a, S>,
+        intersection: &mut Intersection,
         rng: &mut ThreadRng,
     ) -> Option<ScatteringEvent<S>> {
         let norm = intersection.normal;
@@ -127,7 +126,7 @@ impl<S: IsSpectrum> BSDF<S> for Dielectric<S> {
         &self,
         wo: Vec3,
         wi: Vec3,
-        intersection: &mut Intersection<S>,
+        intersection: &mut Intersection,
         rng: &mut ThreadRng,
     ) -> (S, f32) {
         let norm = intersection.normal;
@@ -161,10 +160,10 @@ impl<S> Metal<S> {
 }
 
 impl<S: IsSpectrum> BSDF<S> for Metal<S> {
-    fn scatter<'a>(
+    fn scatter(
         &self,
         wo: Vec3,
-        intersection: &mut Intersection<'a, S>,
+        intersection: &mut Intersection,
         rng: &mut ThreadRng,
     ) -> Option<ScatteringEvent<S>> {
         let sample = Vec3::cosine_weighted_in_hemisphere(rng, self.roughness);
@@ -186,7 +185,7 @@ impl<S: IsSpectrum> BSDF<S> for Metal<S> {
         &self,
         wo: Vec3,
         wi: Vec3,
-        intersection: &mut Intersection<S>,
+        intersection: &mut Intersection,
         _rng: &mut ThreadRng,
     ) -> (S, f32) {
         let reflection = wo.reflected(intersection.normal);
@@ -219,10 +218,10 @@ impl<S> Refractive<S> {
 impl_mat_copy!(Refractive);
 
 impl<S: IsSpectrum> BSDF<S> for Refractive<S> {
-    fn scatter<'a>(
+    fn scatter(
         &self,
         wo: Vec3,
-        intersection: &mut Intersection<'a, S>,
+        intersection: &mut Intersection,
         rng: &mut ThreadRng,
     ) -> Option<ScatteringEvent<S>> {
         let norm = intersection.normal;
@@ -263,7 +262,7 @@ impl<S: IsSpectrum> BSDF<S> for Refractive<S> {
         &self,
         wo: Vec3,
         wi: Vec3,
-        intersection: &mut Intersection<S>,
+        intersection: &mut Intersection,
         rng: &mut ThreadRng,
     ) -> (S, f32) {
         let norm = intersection.normal;
@@ -316,14 +315,13 @@ pub struct Emissive<S, I> {
 }
 
 impl<S: IsSpectrum, I: BSDF<S> + Copy + 'static> Material<S> for Emissive<S, I> {
-    fn setup_scattering_functions<'i, 'a: 'i>(
+    fn setup_scattering_functions<'bsdf, 'arena: 'bsdf>(
         &self,
-        intersection: &mut Intersection<'i, S>,
-        arena: &'a DynamicArena<'_, NonSend>,
-    ) {
-        let bsdf = arena.alloc_copy(*self);
-        let bsdf_ptr = intersection.bsdf.as_mut_ptr();
-        unsafe { *bsdf_ptr = bsdf };
+        _intersection: &mut Intersection,
+        arena: &'arena DynamicArena<'_, NonSend>,
+    ) -> &'bsdf dyn BSDF<S> {
+        let bsdf: &mut Emissive<S, I> = arena.alloc_copy(*self);
+        &*bsdf
     }
 }
 
@@ -338,10 +336,10 @@ where
     S: IsSpectrum,
     I: BSDF<S>,
 {
-    fn scatter<'a>(
+    fn scatter(
         &self,
         wo: Vec3,
-        intersection: &mut Intersection<'a, S>,
+        intersection: &mut Intersection,
         rng: &mut ThreadRng,
     ) -> Option<ScatteringEvent<S>> {
         self.inner.scatter(wo, intersection, rng)
@@ -351,13 +349,13 @@ where
         &self,
         wo: Vec3,
         wi: Vec3,
-        intersection: &mut Intersection<S>,
+        intersection: &mut Intersection,
         rng: &mut ThreadRng,
     ) -> (S, f32) {
         self.inner.bsdf_pdf(wo, wi, intersection, rng)
     }
 
-    fn le(&self, _wo: Vec3, _intersection: &mut Intersection<S>) -> S {
+    fn le(&self, _wo: Vec3, _intersection: &mut Intersection) -> S {
         self.emission
     }
 }
@@ -394,20 +392,20 @@ where
     M1: Material<S>,
     M2: Material<S>,
 {
-    fn setup_scattering_functions<'i, 'a: 'i>(
+    fn setup_scattering_functions<'bsdf, 'arena: 'bsdf>(
         &self,
-        intersection: &mut Intersection<'i, S>,
-        arena: &'a DynamicArena<'_, NonSend>,
-    ) {
+        intersection: &mut Intersection,
+        arena: &'arena DynamicArena<'_, NonSend>,
+    ) -> &'bsdf dyn BSDF<S> {
         let p = intersection.point;
         let in_x = p.x.modulo(self.scale.x * 2.0) < self.scale.x;
         let in_y = p.y.modulo(self.scale.y * 2.0) < self.scale.y;
         let in_z = p.z.modulo(self.scale.z * 2.0) < self.scale.z;
         let inside = (in_x == in_y) == in_z;
         if inside {
-            self.mat1.setup_scattering_functions(intersection, arena);
+            self.mat1.setup_scattering_functions(intersection, arena)
         } else {
-            self.mat2.setup_scattering_functions(intersection, arena);
+            self.mat2.setup_scattering_functions(intersection, arena)
         }
     }
 }

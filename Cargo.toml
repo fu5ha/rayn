@@ -8,6 +8,9 @@ edition = "2018"
 [features]
 default = ["minterpolate"]
 
+[profile.dev]
+opt-level = 3
+
 [profile.release]
 debug = true
 

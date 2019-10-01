@@ -6,12 +6,12 @@ use rand::prelude::*;
 
 use crate::camera::CameraHandle;
 use crate::filter::Filter;
+use crate::hitable::Intersection;
 use crate::integrator::Integrator;
-use crate::math::{Aabr, Aabru, Extent2u, Vec2, Vec2u, Vec3};
+use crate::math::{Aabr, Aabri, Aabru, Extent2u, Vec2, Vec2i, Vec2u, Vec3};
 use crate::spectrum::{IsSpectrum, Rgb, Xyz};
 use crate::world::World;
 
-use std::cell::UnsafeCell;
 use std::collections::HashMap;
 use std::ops::Range;
 use std::sync::{
@@ -31,45 +31,21 @@ macro_rules! declare_channels {
             $($name,)+
         }
 
+        pub enum ChannelTileStorage {
+            $($name(Vec<($storage, f32)>),)+
+        }
+
+        impl ChannelTileStorage {
+            fn new(kind: ChannelKind, res: Extent2u) -> Self {
+                use ChannelKind::*;
+                match kind {
+                    $($name => Self::$name(vec![($initialize, 0.0); res.w * res.h]),)+
+                }
+            }
+        }
+
         pub enum ChannelStorage {
             $($name(Vec<$storage>),)+
-        }
-
-        impl ChannelStorage {
-            pub fn kind(&self) -> ChannelKind {
-                match *self {
-                    $( ChannelStorage::$name(_) => ChannelKind::$name, )+
-                }
-            }
-
-            pub fn copy_from_tile(&mut self, other: &ChannelStorage, full_res: Extent2u, tile_bounds: Aabru) -> Result<(), ()> {
-                let extent = tile_bounds.size();
-                match (self, other) {
-                    $( (ChannelStorage::$name(this_buf), ChannelStorage::$name(tile_buf)) => {
-                        for x in 0..extent.w {
-                            for y in 0..extent.h {
-                                let tile_idx = x + y * extent.w;
-                                let this_idx = (tile_bounds.min.x + x) + (tile_bounds.min.y + y) * full_res.w;
-                                this_buf[this_idx] = tile_buf[tile_idx];
-                            }
-                        }
-                        Ok(())
-                    }, )+
-                    _ => Err(())
-                }
-            }
-        }
-
-        pub enum ChannelRefMut<'a> {
-            $($name(&'a mut [$storage]),)+
-        }
-
-        impl<'a> ChannelRefMut<'a> {
-            pub fn from_storage_mut(storage: &'a mut ChannelStorage) -> Self {
-                match storage {
-                    $( ChannelStorage::$name(buf) => ChannelRefMut::$name(buf.as_mut()), )+
-                }
-            }
         }
 
         impl ChannelStorage {
@@ -77,6 +53,37 @@ macro_rules! declare_channels {
                 use ChannelKind::*;
                 match kind {
                     $($name => Self::$name(vec![$initialize; res.w * res.h]),)+
+                }
+            }
+
+            pub fn kind(&self) -> ChannelKind {
+                match *self {
+                    $( ChannelStorage::$name(_) => ChannelKind::$name, )+
+                }
+            }
+
+            pub fn copy_from_tile(&mut self, other: &ChannelTileStorage, full_res: Extent2u, tile_bounds: Aabru) -> Result<(), ()> {
+                let extent = tile_bounds.size();
+                match (self, other) {
+                    $( (ChannelStorage::$name(this_buf), ChannelTileStorage::$name(tile_buf)) => {
+                        for x in 0..extent.w {
+                            for y in 0..extent.h {
+                                let tile_idx = x + y * extent.w;
+                                let this_idx = (tile_bounds.min.x + x) + (tile_bounds.min.y + y) * full_res.w;
+                                let tile = tile_buf[tile_idx];
+                                this_buf[this_idx] = tile.0 / tile.1;
+                                // if let ChannelTileStorage::Color(tile_buf) = other {
+                                //     let tile = tile_buf[tile_idx];
+                                //     let col = tile.0 / tile.1;
+                                //     if col.x <= 0.001 || col.y <= 0.001 || col.z <= 0.001 {
+                                //         println!("{}, {}, {}", col.x, col.y, col.z);
+                                //     }
+                                // }
+                            }
+                        }
+                        Ok(())
+                    }, )+
+                    _ => Err(())
                 }
             }
         }
@@ -112,15 +119,147 @@ macro_rules! channel_storage_index {
     };
 }
 
-pub struct Tile<N: ArrayLength<ChannelStorage>, F> {
-    epoch: AtomicUsize,
-    channels: GenericArray<ChannelStorage, N>,
-    pixel_bounds: Aabru,
-    uv_bounds: Aabr,
+pub struct Tile<N: ArrayLength<ChannelTileStorage>, F> {
+    epoch: usize,
+    channels: GenericArray<ChannelTileStorage, N>,
+    raster_bounds: Aabru,
+    sample_bounds: Aabri,
+    screen_to_ndc_size: Vec2,
+    filter_table: Vec<f32>,
     filter: F,
 }
 
-pub struct Film<N: ArrayLength<ChannelStorage>, F> {
+impl<N: ArrayLength<ChannelTileStorage>, F: Filter> Tile<N, F> {
+    pub fn new<IC>(
+        epoch: usize,
+        channels: IC,
+        res: Extent2u,
+        raster_bounds: Aabru,
+        filter: F,
+    ) -> Self
+    where
+        IC: std::iter::ExactSizeIterator<Item = ChannelKind>,
+    {
+        let screen_to_ndc_size = Vec2::new(1.0 / res.w as f32, 1.0 / res.h as f32);
+
+        let half_pixel = Vec2::new(0.5, 0.5);
+        let filter_radius = filter.radius();
+
+        let float_sample_bounds = Aabr {
+            min: Vec2::new(
+                raster_bounds.min.x as f32 - filter_radius,
+                raster_bounds.min.y as f32 - filter_radius,
+            ) + half_pixel,
+            max: Vec2::new(
+                raster_bounds.max.x as f32 + filter_radius,
+                raster_bounds.max.y as f32 + filter_radius,
+            ) + half_pixel,
+        };
+
+        let mut filter_table = Vec::new();
+
+        for offset in 0..filter_radius.ceil() as usize + 1 {
+            filter_table.push(filter.evaluate(offset as f32));
+        }
+
+        Tile {
+            epoch,
+            channels: GenericArray::from_exact_iter(
+                channels.map(|kind| ChannelTileStorage::new(kind, raster_bounds.size())),
+            )
+            .expect("Incorrect number of channels passed to tile creation"),
+            raster_bounds,
+            sample_bounds: Aabri {
+                min: Vec2i::new(
+                    float_sample_bounds.min.x.floor() as isize,
+                    float_sample_bounds.min.y.floor() as isize,
+                ),
+                max: Vec2i::new(
+                    float_sample_bounds.max.x.ceil() as isize,
+                    float_sample_bounds.max.y.ceil() as isize,
+                ),
+            },
+            screen_to_ndc_size,
+            filter_table,
+            filter,
+        }
+    }
+
+    pub fn add_sample(
+        &mut self,
+        sample_screen_coord: Vec2,
+        spect: Xyz,
+        first_intersection: Option<Intersection>,
+    ) {
+        let p_discrete = sample_screen_coord - Vec2::new(0.5, 0.5);
+        let filter_radius = self.filter.radius();
+        let sample_influence_bounds = Aabru {
+            min: Vec2u::new(
+                ((p_discrete.x - filter_radius).ceil() as isize)
+                    .max(self.raster_bounds.min.x as isize) as usize,
+                ((p_discrete.y - filter_radius).ceil() as isize)
+                    .max(self.raster_bounds.min.y as isize) as usize,
+            ),
+            max: Vec2u::new(
+                ((p_discrete.x + filter_radius).ceil() as isize)
+                    .min(self.raster_bounds.max.x as isize) as usize,
+                ((p_discrete.y + filter_radius).ceil() as isize)
+                    .min(self.raster_bounds.max.y as isize) as usize,
+            ),
+        };
+
+        let width = self.raster_bounds.size().w;
+        let p_raster = Vec2i::new(
+            sample_screen_coord.x.floor() as isize,
+            sample_screen_coord.y.floor() as isize,
+        );
+
+        for x in sample_influence_bounds.min.x..sample_influence_bounds.max.x {
+            for y in sample_influence_bounds.min.y..sample_influence_bounds.max.y {
+                let weight = self.filter_table[(x as isize - p_raster.x).abs() as usize]
+                    * self.filter_table[(y as isize - p_raster.y).abs() as usize];
+
+                let tile_pixel = Vec2u::new(x, y) - self.raster_bounds.min;
+                let idx = tile_pixel.x + tile_pixel.y * width;
+
+                for channel in self.channels.iter_mut() {
+                    match channel {
+                        ChannelTileStorage::Color(ref mut buf) => {
+                            let (col_sum, weight_sum) = &mut buf[idx];
+                            if let Some(_) = first_intersection {
+                                *col_sum += spect * weight;
+                            }
+                            *weight_sum += weight;
+                        }
+                        ChannelTileStorage::Background(ref mut buf) => {
+                            let (col_sum, weight_sum) = &mut buf[idx];
+                            if let None = first_intersection {
+                                *col_sum += spect * weight;
+                            }
+                            *weight_sum += weight;
+                        }
+                        ChannelTileStorage::Alpha(ref mut buf) => {
+                            let (col_sum, weight_sum) = &mut buf[idx];
+                            if let Some(_) = first_intersection {
+                                *col_sum += 1.0 * weight;
+                            }
+                            *weight_sum += weight;
+                        }
+                        ChannelTileStorage::WorldNormal(ref mut buf) => {
+                            let (col_sum, weight_sum) = &mut buf[idx];
+                            if let Some(isec) = first_intersection {
+                                *col_sum += isec.normal * weight;
+                            }
+                            *weight_sum += weight;
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+pub struct Film<N: ArrayLength<ChannelStorage>> {
     channel_indices: HashMap<ChannelKind, usize>,
     channels: Mutex<GenericArray<ChannelStorage, N>>,
     progressive_epoch: usize,
@@ -128,7 +267,7 @@ pub struct Film<N: ArrayLength<ChannelStorage>, F> {
     res: Extent2u,
 }
 
-impl<'a, N: ArrayLength<ChannelStorage>, F> Film<N, F> {
+impl<'a, N: ArrayLength<ChannelStorage>> Film<N> {
     pub fn new(channels: &[ChannelKind], res: Extent2u) -> Result<Self, String> {
         let mut channel_indices = HashMap::new();
         for (i, kind) in channels.iter().enumerate() {
@@ -319,13 +458,8 @@ impl<'a, N: ArrayLength<ChannelStorage>, F> Film<N, F> {
     }
 }
 
-impl<
-        'a,
-        N: ArrayLength<ChannelStorage> + ArrayLength<ChannelRefMut<'a>>,
-        F: Filter + Copy + Send + Sync,
-    > Film<N, F>
-{
-    pub fn render_frame_into<I: Integrator, S: IsSpectrum>(
+impl<'a, N: ArrayLength<ChannelStorage> + ArrayLength<ChannelTileStorage>> Film<N> {
+    pub fn render_frame_into<I, S, F>(
         &'a mut self,
         world: &World<S>,
         camera: CameraHandle,
@@ -334,9 +468,13 @@ impl<
         tile_size: Extent2u,
         time_range: Range<f32>,
         samples: usize,
-    ) {
+    ) where
+        F: Filter + Copy + Send,
+        I: Integrator,
+        S: IsSpectrum,
+    {
         let camera = world.cameras.get(camera);
-        let tiles = Vec::new();
+        let mut tiles = Vec::new();
 
         let rem = Vec2u::new((self.res.w) % tile_size.w, (self.res.h) % tile_size.h);
         {
@@ -352,116 +490,60 @@ impl<
                         min: start,
                         max: end,
                     };
-                    let actual_tile_size = tile_bounds.size();
 
-                    let uv_start = Vec2::new(
-                        start.x as f32 / self.res.w as f32,
-                        start.y as f32 / self.res.h as f32,
-                    );
-                    let uv_end = Vec2::new(
-                        end.x as f32 / self.res.w as f32,
-                        end.y as f32 / self.res.h as f32,
-                    );
-                    let uv_bounds = Aabr {
-                        min: uv_start,
-                        max: uv_end,
-                    };
-
-                    let tile_channels = GenericArray::from_exact_iter(
-                        channels
-                            .iter()
-                            .map(|channel| ChannelStorage::new(channel.kind(), actual_tile_size)),
-                    )
-                    .unwrap();
-
-                    tiles.push(Tile {
-                        epoch: AtomicUsize::new(0),
-                        channels: tile_channels,
-                        pixel_bounds: tile_bounds,
-                        uv_bounds,
+                    let tile = Tile::new(
+                        self.progressive_epoch,
+                        channels.iter().map(|c| c.kind()),
+                        self.res,
+                        tile_bounds,
                         filter,
-                    });
+                    );
+                    tiles.push(tile);
                 }
             }
         }
 
-        self.integrate_tiles(tiles, |mut tile| {
+        self.integrate_tiles(tiles, |tile| {
             let mut rng = rand::thread_rng();
-            let uniform = Uniform::new(0.0, 1.0);
+            let uniform = Uniform::new(-0.5, 0.5);
 
             let arena = DynamicArena::<'_, NonSend>::new_bounded();
 
-            let tile_extent_f32 = Vec2::new(tile_extent.w as f32, tile_extent.h as f32);
-
-            for x in 0..tile_extent.w {
-                for y in 0..tile_extent.h {
-                    let mut col_spect = S::zero();
-                    let mut a = 0.0;
-                    let mut back_spect = S::zero();
-                    let mut normals = Vec3::zero();
+            for x in tile.sample_bounds.min.x..tile.sample_bounds.max.x {
+                for y in tile.sample_bounds.min.y..tile.sample_bounds.max.y {
                     for _ in 0..samples {
-                        let r = Vec2::new(uniform.sample(&mut rng), uniform.sample(&mut rng));
+                        // let raster_pixel = Vec2u::new(x, y);
+                        // sampler.begin_pixel(raster_pixel);
 
-                        let tile_xy = Vec2::new(x as f32, y as f32) + r;
-                        let uv_offset = tile_xy / tile_extent_f32 * uv_bounds.size();
-                        let uv = uv_bounds.min + uv_offset;
+                        let uv_samp = Vec2::new(uniform.sample(&mut rng), uniform.sample(&mut rng));
+                        let screen_coord = Vec2::new(x as f32 + 0.5, y as f32 + 0.5) + uv_samp;
+
+                        let ndc = tile.screen_to_ndc_size * screen_coord;
 
                         let time = rng.gen_range(time_range.start, time_range.end);
 
-                        let ray = camera.get_ray(uv, time, &mut rng);
-                        integrator.integrate::<S>(
-                            world,
-                            ray,
-                            time,
-                            &mut col_spect,
-                            &mut a,
-                            &mut back_spect,
-                            &mut normals,
-                            &mut rng,
-                            &arena,
-                        );
+                        let ray = camera.get_ray(ndc, time, &mut rng);
+                        let (spect, first_intersection) =
+                            integrator.integrate::<S>(world, ray, time, &mut rng, &arena);
 
-                        tile.add_sample()
-                    }
-
-                    col_spect = col_spect / samples as f32;
-                    a = a / samples as f32;
-                    back_spect = back_spect / samples as f32;
-                    normals /= samples as f32;
-
-                    let idx = x + y * tile_extent.w;
-                    for channel_ref in tile.iter_mut() {
-                        match channel_ref {
-                            ChannelRefMut::Color(buf) => {
-                                buf[idx] = col_spect.into();
-                            }
-                            ChannelRefMut::Alpha(buf) => {
-                                buf[idx] = a;
-                            }
-                            ChannelRefMut::Background(buf) => {
-                                buf[idx] = back_spect.into();
-                            }
-                            ChannelRefMut::WorldNormal(buf) => {
-                                buf[idx] = normals;
-                            }
-                        }
+                        tile.add_sample(screen_coord, spect.into(), first_intersection);
                     }
                 }
             }
         });
     }
 
-    fn integrate_tiles<FN>(&self, tiles: Vec<Tile<N, F>>, integrate_tile: FN)
+    fn integrate_tiles<F, FN>(&mut self, tiles: Vec<Tile<N, F>>, integrate_tile: FN)
     where
+        F: Filter,
         FN: FnOnce(&mut Tile<N, F>) + Send + Sync + Copy,
     {
         let num_tiles = tiles.len();
 
         {
-            let epoch = self.progressive_epoch;
             let this = &*self;
             rayon::scope_fifo(|scope| {
-                for (idx, tile) in tiles.into_iter().enumerate() {
+                for (idx, mut tile) in tiles.into_iter().enumerate() {
                     scope.spawn_fifo(move |_| {
                         integrate_tile(&mut tile);
 
@@ -479,12 +561,11 @@ impl<
         self.progressive_epoch += 1;
     }
 
-    fn tile_finished(&self, tile: Tile<N, F>, num_tiles: usize, tile_idx: usize) {
-        let tile_epoch = tile.epoch.fetch_add(1, Ordering::Relaxed);
-        if self.progressive_epoch != tile_epoch {
+    fn tile_finished<F: Filter>(&self, tile: Tile<N, F>, num_tiles: usize, tile_idx: usize) {
+        if self.progressive_epoch != tile.epoch {
             panic!(
                 "Epoch mismatch! Expected: {}, got: {}",
-                self.progressive_epoch, tile_epoch
+                self.progressive_epoch, tile.epoch
             );
         }
 
@@ -503,7 +584,7 @@ impl<
 
         let Tile {
             channels: tile_channels,
-            pixel_bounds: tile_bounds,
+            raster_bounds: tile_bounds,
             ..
         } = tile;
 

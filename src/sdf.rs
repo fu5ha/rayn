@@ -3,7 +3,6 @@ use crate::hitable::{Hitable, Intersection};
 use crate::material::MaterialHandle;
 use crate::math::Vec3;
 use crate::ray::Ray;
-use crate::spectrum::IsSpectrum;
 
 use sdfu::*;
 
@@ -20,13 +19,8 @@ impl<S> TracedSDF<S> {
     }
 }
 
-impl<SD: SDF<f32, Vec3> + Send + Sync, SP: IsSpectrum> Hitable<SP> for TracedSDF<SD> {
-    fn hit(
-        &self,
-        ray: &Ray,
-        _time: f32,
-        t_range: ::std::ops::Range<f32>,
-    ) -> Option<Intersection<SP>> {
+impl<S: SDF<f32, Vec3> + Send + Sync> Hitable for TracedSDF<S> {
+    fn hit(&self, ray: &Ray, _time: f32, t_range: ::std::ops::Range<f32>) -> Option<Intersection> {
         let dist = self.sdf.dist(*ray.origin()).abs();
         if dist < t_range.end {
             let mut t = dist;

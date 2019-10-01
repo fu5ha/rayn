@@ -1,22 +1,19 @@
-use std::mem::MaybeUninit;
-
-use crate::material::{MaterialHandle, BSDF};
+use crate::material::MaterialHandle;
 use crate::math::{Mat3, OrthonormalBasis, Vec3};
 use crate::ray::Ray;
 
 #[derive(Clone, Copy)]
-pub struct Intersection<'a, S> {
+pub struct Intersection {
     pub t: f32,
     pub point: Vec3,
     pub offset_by: f32,
     pub normal: Vec3,
     pub basis: Option<Mat3>,
     pub material: MaterialHandle,
-    pub bsdf: MaybeUninit<&'a dyn BSDF<S>>,
     // pub eta: f32,
 }
 
-impl<'a, S> Intersection<'a, S> {
+impl Intersection {
     pub fn new(
         t: f32,
         point: Vec3,
@@ -31,7 +28,6 @@ impl<'a, S> Intersection<'a, S> {
             normal,
             basis: None,
             material,
-            bsdf: MaybeUninit::uninit(),
         }
     }
 
@@ -53,38 +49,32 @@ impl<'a, S> Intersection<'a, S> {
     }
 }
 
-pub trait Hitable<S>: Send + Sync {
-    fn hit(&self, ray: &Ray, time: f32, t_range: ::std::ops::Range<f32>)
-        -> Option<Intersection<S>>;
+pub trait Hitable: Send + Sync {
+    fn hit(&self, ray: &Ray, time: f32, t_range: ::std::ops::Range<f32>) -> Option<Intersection>;
 }
 
-pub struct HitableStore<S>(Vec<Box<dyn Hitable<S>>>);
+pub struct HitableStore(Vec<Box<dyn Hitable>>);
 
-impl<S> HitableStore<S> {
+impl HitableStore {
     pub fn new() -> Self {
         HitableStore(Vec::new())
     }
 
-    pub fn push(&mut self, hitable: Box<dyn Hitable<S>>) {
+    pub fn push(&mut self, hitable: Box<dyn Hitable>) {
         self.0.push(hitable)
     }
 }
 
-impl<S> ::std::ops::Deref for HitableStore<S> {
-    type Target = Vec<Box<dyn Hitable<S>>>;
+impl ::std::ops::Deref for HitableStore {
+    type Target = Vec<Box<dyn Hitable>>;
 
-    fn deref(&self) -> &Vec<Box<dyn Hitable<S>>> {
+    fn deref(&self) -> &Vec<Box<dyn Hitable>> {
         &self.0
     }
 }
 
-impl<S> Hitable<S> for HitableStore<S> {
-    fn hit(
-        &self,
-        ray: &Ray,
-        time: f32,
-        t_range: ::std::ops::Range<f32>,
-    ) -> Option<Intersection<S>> {
+impl Hitable for HitableStore {
+    fn hit(&self, ray: &Ray, time: f32, t_range: ::std::ops::Range<f32>) -> Option<Intersection> {
         self.iter()
             .fold((None, t_range.end), |acc, hitable| {
                 let mut closest = acc.1;

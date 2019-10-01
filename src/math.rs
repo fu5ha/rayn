@@ -9,8 +9,10 @@ pub type Vec4 = vec::repr_c::Vec4<f32>;
 pub type Vec3 = vec::repr_c::Vec3<f32>;
 pub type Vec2 = vec::repr_c::Vec2<f32>;
 pub type Vec2u = vec::repr_c::Vec2<usize>;
+pub type Vec2i = vec::repr_c::Vec2<isize>;
 pub type Aabr = vek::geom::repr_c::Aabr<f32>;
 pub type Aabru = vek::geom::repr_c::Aabr<usize>;
+pub type Aabri = vek::geom::repr_c::Aabr<isize>;
 pub type Extent2u = vek::vec::repr_c::Extent2<usize>;
 
 pub type Mat3 = vek::mat::repr_c::Mat3<f32>;
@@ -73,7 +75,9 @@ impl RandomSample3d<f32> for Vec3 {
     }
 
     fn cosine_weighted_in_hemisphere(rng: &mut ThreadRng, constriction: f32) -> Self {
-        (Vec3::unit_z() + Self::rand_on_unit_sphere(rng) * constriction).normalized()
+        let xy = Vec2::rand_in_unit_disk(rng) * constriction;
+        let z = (1.0 - xy.magnitude_squared()).sqrt();
+        Vec3::new(xy.x, xy.y, z)
     }
 }
 

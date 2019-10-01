@@ -1,4 +1,4 @@
-use vek::{ Clamp };
+use vek::Clamp;
 
 use crate::math::Vec3;
 use std::fmt::Debug;
@@ -29,6 +29,7 @@ pub trait IsSpectrum:
     fn zero() -> Self;
     fn one() -> Self;
     fn is_black(&self) -> bool;
+    fn is_nan(&self) -> bool;
     fn max_channel(&self) -> f32;
 }
 
@@ -122,6 +123,10 @@ impl IsSpectrum for Xyz {
 
     fn is_black(&self) -> bool {
         self.max_channel() < 0.0001
+    }
+
+    fn is_nan(&self) -> bool {
+        self.x.is_nan() || self.y.is_nan() || self.z.is_nan()
     }
 
     fn max_channel(&self) -> f32 {
