@@ -18,7 +18,7 @@ mod world;
 use animation::{Sequence, TransformSequence};
 use camera::{CameraHandle, CameraStore, ThinLensCamera};
 use film::{ChannelKind, Film};
-use filter::{BoxFilter, LanczosSincFilter, MitchellNetravaliFilter};
+use filter::BlackmanHarrisFilter;
 use hitable::HitableStore;
 use integrator::PathTracingIntegrator;
 use material::{Checkerboard3d, Dielectric, Emissive, MaterialStore, Metal, Refractive};
@@ -31,7 +31,7 @@ use world::World;
 use std::time::Instant;
 
 const RES: (usize, usize) = (1280, 720);
-const SAMPLES: usize = 128;
+const SAMPLES: usize = 256;
 
 type Spectrum = Xyz;
 
@@ -82,28 +82,28 @@ fn setup() -> (CameraHandle, World<Spectrum>) {
         200.0,
         ground,
     )));
-    // hitables.push(Box::new(TracedSDF::new(
-    //     sdfu::Sphere::new(0.45)
-    //         .subtract(sdfu::Box::new(Vec3::new(0.25, 0.25, 1.5)))
-    //         .union_smooth(
-    //             sdfu::Sphere::new(0.3).translate(Vec3::new(0.3, 0.3, 0.0)),
-    //             0.1,
-    //         )
-    //         .union_smooth(
-    //             sdfu::Sphere::new(0.3).translate(Vec3::new(-0.3, 0.3, 0.0)),
-    //             0.1,
-    //         )
-    //         .subtract(
-    //             sdfu::Box::new(Vec3::new(0.125, 0.125, 1.5)).translate(Vec3::new(-0.3, 0.3, 0.0)),
-    //         )
-    //         .subtract(
-    //             sdfu::Box::new(Vec3::new(0.125, 0.125, 1.5)).translate(Vec3::new(0.3, 0.3, 0.0)),
-    //         )
-    //         .subtract(sdfu::Box::new(Vec3::new(1.5, 0.1, 0.1)).translate(Vec3::new(0.0, 0.3, 0.0)))
-    //         .subtract(sdfu::Box::new(Vec3::new(0.2, 2.0, 0.2)))
-    //         .translate(Vec3::new(-0.2, 0.0, -1.0)),
-    //     checkerboard,
-    // )));
+    hitables.push(Box::new(TracedSDF::new(
+        sdfu::Sphere::new(0.45)
+            .subtract(sdfu::Box::new(Vec3::new(0.25, 0.25, 1.5)))
+            .union_smooth(
+                sdfu::Sphere::new(0.3).translate(Vec3::new(0.3, 0.3, 0.0)),
+                0.1,
+            )
+            .union_smooth(
+                sdfu::Sphere::new(0.3).translate(Vec3::new(-0.3, 0.3, 0.0)),
+                0.1,
+            )
+            .subtract(
+                sdfu::Box::new(Vec3::new(0.125, 0.125, 1.5)).translate(Vec3::new(-0.3, 0.3, 0.0)),
+            )
+            .subtract(
+                sdfu::Box::new(Vec3::new(0.125, 0.125, 1.5)).translate(Vec3::new(0.3, 0.3, 0.0)),
+            )
+            .subtract(sdfu::Box::new(Vec3::new(1.5, 0.1, 0.1)).translate(Vec3::new(0.0, 0.3, 0.0)))
+            .subtract(sdfu::Box::new(Vec3::new(0.2, 2.0, 0.2)))
+            .translate(Vec3::new(-0.2, 0.0, -1.0)),
+        checkerboard,
+    )));
     hitables.push(Box::new(Sphere::new(
         TransformSequence::new(Vec3::new(-0.2, -0.1, -1.0), Quat::default()),
         0.15,
@@ -259,9 +259,7 @@ fn main() {
         let frame_start = frame as f32 * (1.0 / frame_rate as f32);
         let frame_end = frame_start + shutter_speed;
 
-        let filter = MitchellNetravaliFilter::new(2.0, 1.0 / 3.0, 1.0 / 3.0);
-        // let filter = LanczosSincFilter::new(3.0, 3.0);
-        // let filter = BoxFilter::new(0.5);
+        let filter = BlackmanHarrisFilter::default();
 
         film.render_frame_into(
             &world,

@@ -72,13 +72,6 @@ macro_rules! declare_channels {
                                 let this_idx = (tile_bounds.min.x + x) + (tile_bounds.min.y + y) * full_res.w;
                                 let tile = tile_buf[tile_idx];
                                 this_buf[this_idx] = tile.0 / tile.1;
-                                // if let ChannelTileStorage::Color(tile_buf) = other {
-                                //     let tile = tile_buf[tile_idx];
-                                //     let col = tile.0 / tile.1;
-                                //     if col.x <= 0.001 || col.y <= 0.001 || col.z <= 0.001 {
-                                //         println!("{}, {}, {}", col.x, col.y, col.z);
-                                //     }
-                                // }
                             }
                         }
                         Ok(())
@@ -125,7 +118,6 @@ pub struct Tile<N: ArrayLength<ChannelTileStorage>, F> {
     raster_bounds: Aabru,
     sample_bounds: Aabri,
     screen_to_ndc_size: Vec2,
-    filter_table: Vec<f32>,
     filter: F,
 }
 
@@ -156,12 +148,6 @@ impl<N: ArrayLength<ChannelTileStorage>, F: Filter> Tile<N, F> {
             ) + half_pixel,
         };
 
-        let mut filter_table = Vec::new();
-
-        for offset in 0..filter_radius.ceil() as usize + 1 {
-            filter_table.push(filter.evaluate(offset as f32));
-        }
-
         Tile {
             epoch,
             channels: GenericArray::from_exact_iter(
@@ -180,7 +166,6 @@ impl<N: ArrayLength<ChannelTileStorage>, F: Filter> Tile<N, F> {
                 ),
             },
             screen_to_ndc_size,
-            filter_table,
             filter,
         }
     }
@@ -209,15 +194,11 @@ impl<N: ArrayLength<ChannelTileStorage>, F: Filter> Tile<N, F> {
         };
 
         let width = self.raster_bounds.size().w;
-        let p_raster = Vec2i::new(
-            sample_screen_coord.x.floor() as isize,
-            sample_screen_coord.y.floor() as isize,
-        );
 
         for x in sample_influence_bounds.min.x..sample_influence_bounds.max.x {
             for y in sample_influence_bounds.min.y..sample_influence_bounds.max.y {
-                let weight = self.filter_table[(x as isize - p_raster.x).abs() as usize]
-                    * self.filter_table[(y as isize - p_raster.y).abs() as usize];
+                let weight = self.filter.evaluate((x as f32 - p_discrete.x).abs())
+                    * self.filter.evaluate((y as f32 - p_discrete.y).abs());
 
                 let tile_pixel = Vec2u::new(x, y) - self.raster_bounds.min;
                 let idx = tile_pixel.x + tile_pixel.y * width;

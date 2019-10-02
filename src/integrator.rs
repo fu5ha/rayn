@@ -32,7 +32,7 @@ impl Integrator for PathTracingIntegrator {
         rng: &mut ThreadRng,
         arena: &DynamicArena<'_, NonSend>,
     ) -> (S, Option<Intersection>) {
-        let mut luminance = S::zero();
+        let mut radiance = S::zero();
         let mut throughput = S::one();
         let mut first_intersection = None;
         for bounce in 0.. {
@@ -42,7 +42,7 @@ impl Integrator for PathTracingIntegrator {
 
                 let bsdf = material.setup_scattering_functions(&mut intersection, &arena);
 
-                luminance += bsdf.le(-wi, &mut intersection) * throughput;
+                radiance += bsdf.le(-wi, &mut intersection) * throughput;
                 let scattering_event = bsdf.scatter(wi, &mut intersection, rng);
 
                 if bounce == 0 {
@@ -50,10 +50,14 @@ impl Integrator for PathTracingIntegrator {
                 }
 
                 if let Some(se) = scattering_event {
-                    if se.pdf == 0.0 || se.f.is_black() {
+                    let ndl = se.wi.dot(intersection.normal).abs();
+                    if ndl == 0.0 || se.pdf == 0.0 || se.f.is_black() {
                         break;
                     }
-                    throughput *= se.f / se.pdf * se.wi.dot(intersection.normal).abs();
+                    throughput *= se.f / se.pdf * ndl;
+                    if throughput.is_nan() {
+                        break;
+                    }
                     ray = intersection.create_ray(se.wi);
                 } else {
                     break;
@@ -68,7 +72,7 @@ impl Integrator for PathTracingIntegrator {
                         Vec3::new(0.5, 0.7, 1.0),
                         t,
                     ))));
-                luminance += l;
+                radiance += l;
                 break;
             }
 
@@ -84,6 +88,6 @@ impl Integrator for PathTracingIntegrator {
                 throughput /= 1.0 - roulette_factor;
             }
         }
-        (luminance, first_intersection)
+        (radiance, first_intersection)
     }
 }
