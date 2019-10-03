@@ -1,5 +1,6 @@
 use dynamic_arena::{DynamicArena, NonSend};
-use rand::prelude::*;
+use rand::rngs::SmallRng;
+use rand::Rng;
 
 use crate::hitable::Intersection;
 use crate::math::{
@@ -12,14 +13,14 @@ pub trait BSDF<S: IsSpectrum>: Send + Sync {
         &self,
         wo: Vec3,
         intersection: &mut Intersection,
-        rng: &mut ThreadRng,
+        rng: &mut SmallRng,
     ) -> Option<ScatteringEvent<S>>;
     fn bsdf_pdf(
         &self,
         wo: Vec3,
         wi: Vec3,
         intersection: &mut Intersection,
-        rng: &mut ThreadRng,
+        rng: &mut SmallRng,
     ) -> (S, f32);
     fn le(&self, _wo: Vec3, _intersection: &mut Intersection) -> S {
         S::zero()
@@ -93,7 +94,7 @@ impl<S: IsSpectrum> BSDF<S> for Dielectric<S> {
         &self,
         wo: Vec3,
         intersection: &mut Intersection,
-        rng: &mut ThreadRng,
+        rng: &mut SmallRng,
     ) -> Option<ScatteringEvent<S>> {
         let norm = intersection.normal;
         let cos = norm.dot(-wo).abs();
@@ -127,7 +128,7 @@ impl<S: IsSpectrum> BSDF<S> for Dielectric<S> {
         wo: Vec3,
         wi: Vec3,
         intersection: &mut Intersection,
-        rng: &mut ThreadRng,
+        rng: &mut SmallRng,
     ) -> (S, f32) {
         let norm = intersection.normal;
         let cos = norm.dot(-wo).abs();
@@ -164,7 +165,7 @@ impl<S: IsSpectrum> BSDF<S> for Metal<S> {
         &self,
         wo: Vec3,
         intersection: &mut Intersection,
-        rng: &mut ThreadRng,
+        rng: &mut SmallRng,
     ) -> Option<ScatteringEvent<S>> {
         let sample = Vec3::cosine_weighted_in_hemisphere(rng, self.roughness);
         let reflection = wo.reflected(intersection.normal);
@@ -186,7 +187,7 @@ impl<S: IsSpectrum> BSDF<S> for Metal<S> {
         wo: Vec3,
         wi: Vec3,
         intersection: &mut Intersection,
-        _rng: &mut ThreadRng,
+        _rng: &mut SmallRng,
     ) -> (S, f32) {
         let reflection = wo.reflected(intersection.normal);
         let pdf = wi.dot(reflection).abs() / std::f32::consts::PI;
@@ -222,7 +223,7 @@ impl<S: IsSpectrum> BSDF<S> for Refractive<S> {
         &self,
         wo: Vec3,
         intersection: &mut Intersection,
-        rng: &mut ThreadRng,
+        rng: &mut SmallRng,
     ) -> Option<ScatteringEvent<S>> {
         let norm = intersection.normal;
         let odn = wo.dot(norm);
@@ -265,7 +266,7 @@ impl<S: IsSpectrum> BSDF<S> for Refractive<S> {
         wo: Vec3,
         wi: Vec3,
         intersection: &mut Intersection,
-        rng: &mut ThreadRng,
+        rng: &mut SmallRng,
     ) -> (S, f32) {
         let norm = intersection.normal;
         let (refract_norm, eta, cos) = if wo.dot(norm) > 0.0 {
@@ -342,7 +343,7 @@ where
         &self,
         wo: Vec3,
         intersection: &mut Intersection,
-        rng: &mut ThreadRng,
+        rng: &mut SmallRng,
     ) -> Option<ScatteringEvent<S>> {
         self.inner.scatter(wo, intersection, rng)
     }
@@ -352,7 +353,7 @@ where
         wo: Vec3,
         wi: Vec3,
         intersection: &mut Intersection,
-        rng: &mut ThreadRng,
+        rng: &mut SmallRng,
     ) -> (S, f32) {
         self.inner.bsdf_pdf(wo, wi, intersection, rng)
     }

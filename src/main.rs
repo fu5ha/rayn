@@ -18,13 +18,13 @@ mod world;
 use animation::TransformSequence;
 use camera::{CameraHandle, CameraStore, ThinLensCamera};
 use film::{ChannelKind, Film};
-use filter::BlackmanHarrisFilter;
+use filter::{BlackmanHarrisFilter, BoxFilter};
 use hitable::HitableStore;
 use integrator::PathTracingIntegrator;
 use material::{Checkerboard3d, Dielectric, Emissive, MaterialStore, Metal, Refractive};
 use math::{Extent2u, Quat, Vec3};
 use sdf::TracedSDF;
-use spectrum::{Rgb, Xyz};
+use spectrum::Rgb;
 use sphere::Sphere;
 use world::World;
 
@@ -33,46 +33,28 @@ use std::time::Instant;
 const RES: (usize, usize) = (1920, 1080);
 const SAMPLES: usize = 64;
 
-fn setup() -> (CameraHandle, World<Xyz>) {
+fn setup() -> (CameraHandle, World<Rgb>) {
     let white_emissive = Emissive::new(
-        Xyz::from(Rgb::new(1.0, 1.0, 1.5)),
-        Dielectric::new(Xyz::from(Rgb::new(0.5, 0.5, 0.5)), 0.0),
+        Rgb::new(1.0, 1.0, 1.5),
+        Dielectric::new(Rgb::new(0.5, 0.5, 0.5), 0.0),
     );
     let checkerboard = Checkerboard3d::new(
         Vec3::new(0.15, 0.15, 0.15),
-        Dielectric::new(Xyz::from(Rgb::new(0.9, 0.35, 0.55)), 0.0),
-        Refractive::new(Xyz::from(Rgb::new(0.9, 0.9, 0.9)), 0.0, 1.5),
+        Dielectric::new(Rgb::new(0.9, 0.35, 0.55), 0.0),
+        Refractive::new(Rgb::new(0.9, 0.9, 0.9), 0.0, 1.5),
     );
 
     let mut materials = MaterialStore::new();
     let checkerboard = materials.add_material(Box::new(checkerboard));
     let white_emissive = materials.add_material(Box::new(white_emissive));
-    let ground = materials.add_material(Box::new(Dielectric::new(
-        Xyz::from(Rgb::new(0.25, 0.2, 0.35)),
-        0.3,
-    )));
-    let gold = materials.add_material(Box::new(Metal::new(
-        Xyz::from(Rgb::new(1.0, 0.9, 0.5)),
-        0.0,
-    )));
-    let silver = materials.add_material(Box::new(Metal::new(
-        Xyz::from(Rgb::new(0.9, 0.9, 0.9)),
-        0.05,
-    )));
-    let gold_rough = materials.add_material(Box::new(Metal::new(
-        Xyz::from(Rgb::new(1.0, 0.9, 0.5)),
-        0.5,
-    )));
-    let glass = materials.add_material(Box::new(Refractive::new(
-        Xyz::from(Rgb::new(0.9, 0.9, 0.9)),
-        0.0,
-        1.5,
-    )));
-    let glass_rough = materials.add_material(Box::new(Refractive::new(
-        Xyz::from(Rgb::new(0.9, 0.9, 0.9)),
-        0.5,
-        1.5,
-    )));
+    let ground = materials.add_material(Box::new(Dielectric::new(Rgb::new(0.25, 0.2, 0.35), 0.3)));
+    let gold = materials.add_material(Box::new(Metal::new(Rgb::new(1.0, 0.9, 0.5), 0.0)));
+    let silver = materials.add_material(Box::new(Metal::new(Rgb::new(0.9, 0.9, 0.9), 0.05)));
+    let gold_rough = materials.add_material(Box::new(Metal::new(Rgb::new(1.0, 0.9, 0.5), 0.5)));
+    let glass =
+        materials.add_material(Box::new(Refractive::new(Rgb::new(0.9, 0.9, 0.9), 0.0, 1.5)));
+    let glass_rough =
+        materials.add_material(Box::new(Refractive::new(Rgb::new(0.9, 0.9, 0.9), 0.5, 1.5)));
 
     let mut hitables = HitableStore::new();
     hitables.push(Box::new(Sphere::new(
@@ -80,33 +62,33 @@ fn setup() -> (CameraHandle, World<Xyz>) {
         200.0,
         ground,
     )));
-    // hitables.push(Box::new(TracedSDF::new(
-    //     sdfu::Sphere::new(0.45)
-    //         .subtract(sdfu::Box::new(Vec3::new(0.25, 0.25, 1.5)))
-    //         .union_smooth(
-    //             sdfu::Sphere::new(0.3).translate(Vec3::new(0.3, 0.3, 0.0)),
-    //             0.1,
-    //         )
-    //         .union_smooth(
-    //             sdfu::Sphere::new(0.3).translate(Vec3::new(-0.3, 0.3, 0.0)),
-    //             0.1,
-    //         )
-    //         .subtract(
-    //             sdfu::Box::new(Vec3::new(0.125, 0.125, 1.5)).translate(Vec3::new(-0.3, 0.3, 0.0)),
-    //         )
-    //         .subtract(
-    //             sdfu::Box::new(Vec3::new(0.125, 0.125, 1.5)).translate(Vec3::new(0.3, 0.3, 0.0)),
-    //         )
-    //         .subtract(sdfu::Box::new(Vec3::new(1.5, 0.1, 0.1)).translate(Vec3::new(0.0, 0.3, 0.0)))
-    //         .subtract(sdfu::Box::new(Vec3::new(0.2, 2.0, 0.2)))
-    //         .translate(Vec3::new(-0.2, 0.0, -1.0)),
-    //     Sphere::new(
-    //         TransformSequence::new(Vec3::new(-0.2, 0.0, -1.0), Quat::default()),
-    //         1.0,
-    //         ground,
-    //     ),
-    //     checkerboard,
-    // )));
+    hitables.push(Box::new(TracedSDF::new(
+        sdfu::Sphere::new(0.45)
+            .subtract(sdfu::Box::new(Vec3::new(0.25, 0.25, 1.5)))
+            .union_smooth(
+                sdfu::Sphere::new(0.3).translate(Vec3::new(0.3, 0.3, 0.0)),
+                0.1,
+            )
+            .union_smooth(
+                sdfu::Sphere::new(0.3).translate(Vec3::new(-0.3, 0.3, 0.0)),
+                0.1,
+            )
+            .subtract(
+                sdfu::Box::new(Vec3::new(0.125, 0.125, 1.5)).translate(Vec3::new(-0.3, 0.3, 0.0)),
+            )
+            .subtract(
+                sdfu::Box::new(Vec3::new(0.125, 0.125, 1.5)).translate(Vec3::new(0.3, 0.3, 0.0)),
+            )
+            .subtract(sdfu::Box::new(Vec3::new(1.5, 0.1, 0.1)).translate(Vec3::new(0.0, 0.3, 0.0)))
+            .subtract(sdfu::Box::new(Vec3::new(0.2, 2.0, 0.2)))
+            .translate(Vec3::new(-0.2, 0.0, -1.0)),
+        Sphere::new(
+            TransformSequence::new(Vec3::new(-0.2, 0.0, -1.0), Quat::default()),
+            1.0,
+            ground,
+        ),
+        checkerboard,
+    )));
     hitables.push(Box::new(Sphere::new(
         TransformSequence::new(Vec3::new(-0.2, -0.05, -1.0), Quat::default()),
         0.15,
@@ -198,7 +180,8 @@ fn main() {
     let frame_range = 0..1;
     let shutter_speed = 1.0 / 24.0;
 
-    let filter = BlackmanHarrisFilter::default();
+    let filter = BlackmanHarrisFilter::new(2.0);
+    // let filter = BoxFilter::default();
     let integrator = PathTracingIntegrator { max_bounces: 6 };
 
     for frame in frame_range {

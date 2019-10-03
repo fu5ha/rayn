@@ -1,6 +1,7 @@
 use std::f32::consts::PI;
 
-use rand::prelude::*;
+use rand::rngs::SmallRng;
+use rand::Rng;
 use vek::vec;
 
 use crate::spectrum::IsSpectrum;
@@ -48,11 +49,11 @@ impl OrthonormalBasis for Vec3 {
 }
 
 pub trait RandomSample2d {
-    fn rand_in_unit_disk(rng: &mut ThreadRng) -> Self;
+    fn rand_in_unit_disk(rng: &mut SmallRng) -> Self;
 }
 
 impl RandomSample2d for Vec2 {
-    fn rand_in_unit_disk(rng: &mut ThreadRng) -> Self {
+    fn rand_in_unit_disk(rng: &mut SmallRng) -> Self {
         let rho = rng.gen::<f32>().sqrt();
         let theta = rng.gen_range(0.0, std::f32::consts::PI * 2.0);
         Vec2::new(rho * theta.cos(), rho * theta.sin())
@@ -60,24 +61,24 @@ impl RandomSample2d for Vec2 {
 }
 
 pub trait RandomSample3d<T> {
-    fn rand_in_unit_sphere(rng: &mut ThreadRng) -> Self;
-    fn rand_on_unit_sphere(rng: &mut ThreadRng) -> Self;
-    fn cosine_weighted_in_hemisphere(rng: &mut ThreadRng, factor: T) -> Self;
+    fn rand_in_unit_sphere(rng: &mut SmallRng) -> Self;
+    fn rand_on_unit_sphere(rng: &mut SmallRng) -> Self;
+    fn cosine_weighted_in_hemisphere(rng: &mut SmallRng, factor: T) -> Self;
 }
 
 impl RandomSample3d<f32> for Vec3 {
-    fn rand_in_unit_sphere(rng: &mut ThreadRng) -> Self {
+    fn rand_in_unit_sphere(rng: &mut SmallRng) -> Self {
         let theta = rng.gen_range(0f32, 2f32 * PI);
         let phi = rng.gen_range(-1f32, 1f32);
         let ophisq = (1.0 - phi * phi).sqrt();
         Vec3::new(ophisq * theta.cos(), ophisq * theta.sin(), phi)
     }
 
-    fn rand_on_unit_sphere(rng: &mut ThreadRng) -> Self {
+    fn rand_on_unit_sphere(rng: &mut SmallRng) -> Self {
         Self::rand_in_unit_sphere(rng).normalized()
     }
 
-    fn cosine_weighted_in_hemisphere(rng: &mut ThreadRng, constriction: f32) -> Self {
+    fn cosine_weighted_in_hemisphere(rng: &mut SmallRng, constriction: f32) -> Self {
         let xy = Vec2::rand_in_unit_disk(rng) * constriction;
         let z = (1.0 - xy.magnitude_squared()).sqrt();
         Vec3::new(xy.x, xy.y, z)

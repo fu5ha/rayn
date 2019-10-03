@@ -1,7 +1,6 @@
 use dynamic_arena::{DynamicArena, NonSend};
 use generic_array::{ArrayLength, GenericArray};
 
-use rand::distributions::Uniform;
 use rand::prelude::*;
 
 use crate::camera::CameraHandle;
@@ -9,7 +8,7 @@ use crate::filter::{Filter, FilterImportanceSampler};
 use crate::hitable::Intersection;
 use crate::integrator::Integrator;
 use crate::math::{Aabru, Extent2u, Vec2, Vec2u, Vec3};
-use crate::spectrum::{IsSpectrum, Rgb, Xyz};
+use crate::spectrum::{IsSpectrum, Rgb};
 use crate::world::World;
 
 use std::collections::HashMap;
@@ -85,16 +84,16 @@ macro_rules! declare_channels {
 
 declare_channels! {
     Color => {
-        storage: Xyz,
-        init: Xyz::zero(),
+        storage: Rgb,
+        init: Rgb::zero(),
     },
     Alpha => {
         storage: f32,
         init: 0f32,
     },
     Background => {
-        storage: Xyz,
-        init: Xyz::zero(),
+        storage: Rgb,
+        init: Rgb::zero(),
     },
     WorldNormal => {
         storage: Vec3,
@@ -113,6 +112,7 @@ macro_rules! channel_storage_index {
 }
 
 pub struct Tile<N: ArrayLength<ChannelTileStorage>> {
+    index: usize,
     epoch: usize,
     channels: GenericArray<ChannelTileStorage, N>,
     raster_bounds: Aabru,
@@ -121,13 +121,20 @@ pub struct Tile<N: ArrayLength<ChannelTileStorage>> {
 }
 
 impl<N: ArrayLength<ChannelTileStorage>> Tile<N> {
-    pub fn new<IC>(epoch: usize, channels: IC, res: Extent2u, raster_bounds: Aabru) -> Self
+    pub fn new<IC>(
+        index: usize,
+        epoch: usize,
+        channels: IC,
+        res: Extent2u,
+        raster_bounds: Aabru,
+    ) -> Self
     where
         IC: std::iter::ExactSizeIterator<Item = ChannelKind>,
     {
         let screen_to_ndc_size = Vec2::new(1.0 / res.w as f32, 1.0 / res.h as f32);
 
         Tile {
+            index,
             epoch,
             channels: GenericArray::from_exact_iter(
                 channels.map(|kind| ChannelTileStorage::new(kind, raster_bounds.size())),
@@ -142,7 +149,7 @@ impl<N: ArrayLength<ChannelTileStorage>> Tile<N> {
     pub fn add_sample(
         &mut self,
         tile_coord: Vec2u,
-        spect: Xyz,
+        spect: Rgb,
         first_intersection: Option<Intersection>,
     ) {
         let idx = tile_coord.x + tile_coord.y * self.raster_extent.w;
@@ -401,6 +408,7 @@ impl<'a, N: ArrayLength<ChannelStorage> + ArrayLength<ChannelTileStorage>> Film<
 
         let rem = Vec2u::new((self.res.w) % tile_size.w, (self.res.h) % tile_size.h);
         {
+            let mut idx = 0;
             let channels = self.channels.lock().unwrap();
             for tile_x in 0..((self.res.w + rem.x) / tile_size.w) {
                 for tile_y in 0..((self.res.h + rem.y) / tile_size.h) {
@@ -415,12 +423,15 @@ impl<'a, N: ArrayLength<ChannelStorage> + ArrayLength<ChannelTileStorage>> Film<
                     };
 
                     let tile = Tile::new(
+                        idx,
                         self.progressive_epoch,
                         channels.iter().map(|c| c.kind()),
                         self.res,
                         tile_bounds,
                     );
                     tiles.push(tile);
+
+                    idx += 1;
                 }
             }
         }
@@ -428,8 +439,8 @@ impl<'a, N: ArrayLength<ChannelStorage> + ArrayLength<ChannelTileStorage>> Film<
         let fis = FilterImportanceSampler::new(filter);
 
         self.integrate_tiles(tiles, |tile| {
-            let mut rng = rand::thread_rng();
-            let uniform = Uniform::new(0.0, 1.0);
+            let mut rng = SmallRng::seed_from_u64(tile.index as u64);
+            // let mut rng = SmallRng::from_rng(thread_rng()).unwrap();
 
             let arena = DynamicArena::<'_, NonSend>::new_bounded();
 
@@ -441,7 +452,7 @@ impl<'a, N: ArrayLength<ChannelStorage> + ArrayLength<ChannelTileStorage>> Film<
                         // let raster_pixel = Vec2u::new(x, y);
                         // sampler.begin_pixel(raster_pixel);
 
-                        let uv_samp = Vec2::new(uniform.sample(&mut rng), uniform.sample(&mut rng));
+                        let uv_samp = Vec2::new(rng.gen::<f32>(), rng.gen::<f32>());
                         let fis_samp = Vec2::new(fis.sample(uv_samp.x), fis.sample(uv_samp.y));
 
                         let screen_coord = Vec2::new(x as f32 + 0.5, y as f32 + 0.5) + fis_samp;

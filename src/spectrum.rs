@@ -21,8 +21,8 @@ pub trait IsSpectrum:
     + Clone
     + Copy
     + Debug
-    + Into<Xyz>
-    + From<Xyz>
+    + Into<Rgb>
+    + From<Rgb>
     + Send
     + Sync
 {
@@ -67,63 +67,13 @@ impl Deref for Rgb {
     }
 }
 
-#[derive(Clone, Copy, Debug, PartialEq)]
-pub struct Xyz(Vec3);
-
-impl Deref for Xyz {
-    type Target = Vec3;
-    fn deref(&self) -> &Vec3 {
-        &self.0
-    }
-}
-
-impl Xyz {
-    #[allow(dead_code)]
-    pub fn new(x: f32, y: f32, z: f32) -> Self {
-        Xyz(Vec3::new(x, y, z))
-    }
-
-    #[allow(dead_code)]
-    pub fn gamma_corrected(&self, gamma: f32) -> Self {
-        Xyz(self.0.map(|x| x.powf(1.0 / gamma)))
-    }
-
-    #[allow(dead_code)]
-    pub fn saturated(&self) -> Self {
-        Xyz(self.0.map(|x| Clamp::clamped01(x)))
-    }
-}
-
-impl From<Rgb> for Xyz {
-    fn from(rgb: Rgb) -> Self {
-        Xyz(Vec3 {
-            // x: 0.412453 * rgb.r + 0.357580 * rgb.g + 0.180423 * rgb.b,
-            // y: 0.212671 * rgb.r + 0.715160 * rgb.g + 0.072169 * rgb.b,
-            // z: 0.019334 * rgb.r + 0.119193 * rgb.g + 0.950227 * rgb.b,
-            x: 0.4360747 * rgb.r + 0.3850649 * rgb.g + 0.1430804 * rgb.b,
-            y: 0.2225045 * rgb.r + 0.7168786 * rgb.g + 0.0606169 * rgb.b,
-            z: 0.0139322 * rgb.r + 0.0971045 * rgb.g + 0.7141733 * rgb.b,
-        })
-    }
-}
-
-impl From<Xyz> for Rgb {
-    fn from(xyz: Xyz) -> Self {
-        Rgb::new(
-            3.1338561 * xyz.x - 1.6168667 * xyz.y - 0.4906146 * xyz.z,
-            -0.9787684 * xyz.x + 1.9161415 * xyz.y + 0.0334540 * xyz.z,
-            0.0719453 * xyz.x - 0.2289914 * xyz.y + 1.4052427 * xyz.z,
-        )
-    }
-}
-
-impl IsSpectrum for Xyz {
+impl IsSpectrum for Rgb {
     fn zero() -> Self {
-        Xyz(Vec3::zero())
+        Rgb(VekRgb::zero())
     }
 
     fn one() -> Self {
-        Xyz(Vec3::one())
+        Rgb(VekRgb::one())
     }
 
     fn is_black(&self) -> bool {
@@ -131,7 +81,7 @@ impl IsSpectrum for Xyz {
     }
 
     fn is_nan(&self) -> bool {
-        self.x.is_nan() || self.y.is_nan() || self.z.is_nan()
+        self.r.is_nan() || self.g.is_nan() || self.b.is_nan()
     }
 
     fn max_channel(&self) -> f32 {
@@ -139,9 +89,9 @@ impl IsSpectrum for Xyz {
     }
 }
 
-impl Sum for Xyz {
+impl Sum for Rgb {
     fn sum<I: Iterator<Item = Self>>(iter: I) -> Self {
-        iter.fold(Xyz::zero(), |a, b| a + b)
+        iter.fold(Rgb::zero(), |a, b| a + b)
     }
 }
 
@@ -219,5 +169,4 @@ macro_rules! impl_wrapper_ops {
     };
 }
 
-impl_wrapper_ops!(Xyz);
 impl_wrapper_ops!(Rgb);
