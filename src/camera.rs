@@ -1,11 +1,11 @@
-use rand::prelude::*;
+use rand::rngs::SmallRng;
 
 use crate::animation::Sequenced;
 use crate::math::{RandomSample2d, Transform, Vec2, Vec3};
 use crate::ray::Ray;
 
 pub trait Camera: Send + Sync {
-    fn get_ray(&self, uv: Vec2, time: f32, rng: &mut ThreadRng) -> Ray;
+    fn get_ray(&self, uv: Vec2, time: f32, rng: &mut SmallRng) -> Ray;
 }
 
 #[derive(Clone, Copy, Debug)]
@@ -47,7 +47,7 @@ impl<TR> PinholeCamera<TR> {
 }
 
 impl<TR: Sequenced<Transform>> Camera for PinholeCamera<TR> {
-    fn get_ray(&self, uv: Vec2, time: f32, _rng: &mut ThreadRng) -> Ray {
+    fn get_ray(&self, uv: Vec2, time: f32, _rng: &mut SmallRng) -> Ray {
         let transform = self.transform_sequence.sample_at(time);
         Ray::new(
             transform.position,
@@ -90,7 +90,7 @@ where
     U: Sequenced<Vec3>,
     F: Sequenced<Vec3>,
 {
-    fn get_ray(&self, uv: Vec2, time: f32, rng: &mut ThreadRng) -> Ray {
+    fn get_ray(&self, uv: Vec2, time: f32, rng: &mut SmallRng) -> Ray {
         let origin = self.origin.sample_at(time);
         let at = self.at.sample_at(time);
         let up = self.up.sample_at(time);

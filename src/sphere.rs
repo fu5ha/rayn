@@ -20,13 +20,8 @@ impl<TR: Sequenced<Transform>> Sphere<TR> {
     }
 }
 
-impl<'a, TR: Sequenced<Transform>, S> Hitable<S> for Sphere<TR> {
-    fn hit(
-        &self,
-        ray: &Ray,
-        time: f32,
-        t_range: ::std::ops::Range<f32>,
-    ) -> Option<Intersection<S>> {
+impl<'a, TR: Sequenced<Transform>> Hitable for Sphere<TR> {
+    fn hit(&self, ray: &Ray, time: f32, t_range: ::std::ops::Range<f32>) -> Option<Intersection> {
         let transform = self.transform_seq.sample_at(time);
         let origin = transform.position;
         let oc = ray.origin() - origin;

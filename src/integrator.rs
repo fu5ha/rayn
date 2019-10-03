@@ -1,10 +1,11 @@
 use dynamic_arena::{DynamicArena, NonSend};
-use rand::prelude::*;
+use rand::rngs::SmallRng;
+use rand::Rng;
 
-use crate::hitable::Hitable;
+use crate::hitable::{Hitable, Intersection};
 use crate::math::Vec3;
 use crate::ray::Ray;
-use crate::spectrum::{IsSpectrum, Rgb, Xyz};
+use crate::spectrum::{IsSpectrum, Rgb};
 use crate::world::World;
 
 pub trait Integrator: Send + Sync {
@@ -13,13 +14,9 @@ pub trait Integrator: Send + Sync {
         world: &World<S>,
         ray: Ray,
         time: f32,
-        col_spect: &mut S,
-        col_a: &mut f32,
-        back_spect: &mut S,
-        normals: &mut Vec3,
-        rng: &mut ThreadRng,
+        rng: &mut SmallRng,
         arena: &DynamicArena<'_, NonSend>,
-    );
+    ) -> (S, Option<Intersection>);
 }
 
 #[derive(Clone, Copy)]
@@ -33,36 +30,35 @@ impl Integrator for PathTracingIntegrator {
         world: &World<S>,
         mut ray: Ray,
         time: f32,
-        luminance: &mut S,
-        col_a: &mut f32,
-        back_luminance: &mut S,
-        normals: &mut Vec3,
-        rng: &mut ThreadRng,
+        rng: &mut SmallRng,
         arena: &DynamicArena<'_, NonSend>,
-    ) {
+    ) -> (S, Option<Intersection>) {
+        let mut radiance = S::zero();
         let mut throughput = S::one();
+        let mut first_intersection = None;
         for bounce in 0.. {
             if let Some(mut intersection) = world.hitables.hit(&ray, time, 0.001..1000.0) {
                 let wi = *ray.dir();
                 let material = world.materials.get(intersection.material);
 
-                material.setup_scattering_functions(&mut intersection, &arena);
-                let bsdf = unsafe { intersection.bsdf.assume_init() };
+                let bsdf = material.setup_scattering_functions(&mut intersection, &arena);
 
-                if bounce == 0 {
-                    *normals += intersection.normal;
-                }
-
-                *luminance += bsdf.le(-wi, &mut intersection) * throughput;
-                *col_a += 1.0;
-
+                radiance += bsdf.le(-wi, &mut intersection) * throughput;
                 let scattering_event = bsdf.scatter(wi, &mut intersection, rng);
 
+                if bounce == 0 {
+                    first_intersection = Some(intersection);
+                }
+
                 if let Some(se) = scattering_event {
-                    if se.pdf == 0.0 || se.f.is_black() {
+                    let ndl = se.wi.dot(intersection.normal).abs();
+                    if ndl == 0.0 || se.pdf == 0.0 || se.f.is_black() {
                         break;
                     }
-                    throughput *= se.f / se.pdf * se.wi.dot(intersection.normal).abs();
+                    throughput *= se.f / se.pdf * ndl;
+                    if throughput.is_nan() {
+                        break;
+                    }
                     ray = intersection.create_ray(se.wi);
                 } else {
                     break;
@@ -72,16 +68,12 @@ impl Integrator for PathTracingIntegrator {
                 let t = 0.5 * (dir.y + 1.0);
 
                 let l = throughput
-                    * S::from(Xyz::from(Rgb::from(Vec3::lerp(
+                    * S::from(Rgb::from(Vec3::lerp(
                         Vec3::one(),
                         Vec3::new(0.5, 0.7, 1.0),
                         t,
-                    ))));
-                if bounce == 0 {
-                    *back_luminance += l;
-                } else {
-                    *luminance += l;
-                }
+                    )));
+                radiance += l;
                 break;
             }
 
@@ -97,5 +89,6 @@ impl Integrator for PathTracingIntegrator {
                 throughput /= 1.0 - roulette_factor;
             }
         }
+        (radiance, first_intersection)
     }
 }

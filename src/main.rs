@@ -4,6 +4,7 @@ use sdfu::SDF;
 mod animation;
 mod camera;
 mod film;
+mod filter;
 mod hitable;
 mod integrator;
 mod material;
@@ -14,67 +15,48 @@ mod spectrum;
 mod sphere;
 mod world;
 
-use animation::{Sequence, TransformSequence};
+use animation::TransformSequence;
 use camera::{CameraHandle, CameraStore, ThinLensCamera};
 use film::{ChannelKind, Film};
+use filter::{BlackmanHarrisFilter, BoxFilter};
 use hitable::HitableStore;
 use integrator::PathTracingIntegrator;
 use material::{Checkerboard3d, Dielectric, Emissive, MaterialStore, Metal, Refractive};
 use math::{Extent2u, Quat, Vec3};
 use sdf::TracedSDF;
-use spectrum::{Rgb, Xyz};
+use spectrum::Rgb;
 use sphere::Sphere;
 use world::World;
 
 use std::time::Instant;
 
 const RES: (usize, usize) = (1280, 720);
-const SAMPLES: usize = 32;
+const SAMPLES: usize = 64;
 
-type Spectrum = Xyz;
-
-fn setup() -> (CameraHandle, World<Spectrum>) {
+fn setup() -> (CameraHandle, World<Rgb>) {
     let white_emissive = Emissive::new(
-        Spectrum::from(Rgb::new(1.0, 1.0, 1.5)),
-        Dielectric::new(Spectrum::from(Rgb::new(0.5, 0.5, 0.5)), 0.0),
+        Rgb::new(1.0, 1.0, 1.5),
+        Dielectric::new(Rgb::new(0.5, 0.5, 0.5), 0.0),
     );
     let checkerboard = Checkerboard3d::new(
         Vec3::new(0.15, 0.15, 0.15),
-        Dielectric::new(Spectrum::from(Rgb::new(0.9, 0.35, 0.55)), 0.0),
-        Refractive::new(Spectrum::from(Rgb::new(0.9, 0.9, 0.9)), 0.0, 1.5),
+        Dielectric::new(Rgb::new(0.9, 0.35, 0.55), 0.0),
+        Refractive::new(Rgb::new(0.9, 0.9, 0.9), 0.0, 1.5),
     );
 
     let mut materials = MaterialStore::new();
     let checkerboard = materials.add_material(Box::new(checkerboard));
     let white_emissive = materials.add_material(Box::new(white_emissive));
-    let ground = materials.add_material(Box::new(Dielectric::new(
-        Spectrum::from(Rgb::new(0.25, 0.2, 0.35)),
-        0.3,
-    )));
-    let gold = materials.add_material(Box::new(Metal::new(
-        Spectrum::from(Rgb::new(1.0, 0.9, 0.5)),
-        0.0,
-    )));
-    let silver = materials.add_material(Box::new(Metal::new(
-        Spectrum::from(Rgb::new(0.9, 0.9, 0.9)),
-        0.05,
-    )));
-    let gold_rough = materials.add_material(Box::new(Metal::new(
-        Spectrum::from(Rgb::new(1.0, 0.9, 0.5)),
-        0.5,
-    )));
-    let glass = materials.add_material(Box::new(Refractive::new(
-        Spectrum::from(Rgb::new(0.9, 0.9, 0.9)),
-        0.0,
-        1.5,
-    )));
-    let glass_rough = materials.add_material(Box::new(Refractive::new(
-        Spectrum::from(Rgb::new(0.9, 0.9, 0.9)),
-        0.5,
-        1.5,
-    )));
+    let ground = materials.add_material(Box::new(Dielectric::new(Rgb::new(0.25, 0.2, 0.35), 0.3)));
+    let gold = materials.add_material(Box::new(Metal::new(Rgb::new(1.0, 0.9, 0.5), 0.0)));
+    let silver = materials.add_material(Box::new(Metal::new(Rgb::new(0.9, 0.9, 0.9), 0.05)));
+    let gold_rough = materials.add_material(Box::new(Metal::new(Rgb::new(1.0, 0.9, 0.5), 0.5)));
+    let glass =
+        materials.add_material(Box::new(Refractive::new(Rgb::new(0.9, 0.9, 0.9), 0.0, 1.5)));
+    let glass_rough =
+        materials.add_material(Box::new(Refractive::new(Rgb::new(0.9, 0.9, 0.9), 0.5, 1.5)));
 
-    let mut hitables = HitableStore::<Spectrum>::new();
+    let mut hitables = HitableStore::new();
     hitables.push(Box::new(Sphere::new(
         TransformSequence::new(Vec3::new(0.0, -200.5, -1.0), Quat::default()),
         200.0,
@@ -100,10 +82,15 @@ fn setup() -> (CameraHandle, World<Spectrum>) {
             .subtract(sdfu::Box::new(Vec3::new(1.5, 0.1, 0.1)).translate(Vec3::new(0.0, 0.3, 0.0)))
             .subtract(sdfu::Box::new(Vec3::new(0.2, 2.0, 0.2)))
             .translate(Vec3::new(-0.2, 0.0, -1.0)),
+        Sphere::new(
+            TransformSequence::new(Vec3::new(-0.2, 0.0, -1.0), Quat::default()),
+            1.0,
+            ground,
+        ),
         checkerboard,
     )));
     hitables.push(Box::new(Sphere::new(
-        TransformSequence::new(Vec3::new(-0.2, -0.1, -1.0), Quat::default()),
+        TransformSequence::new(Vec3::new(-0.2, -0.05, -1.0), Quat::default()),
         0.15,
         white_emissive,
     )));
@@ -113,8 +100,8 @@ fn setup() -> (CameraHandle, World<Spectrum>) {
         gold,
     )));
     hitables.push(Box::new(Sphere::new(
-        TransformSequence::new(Vec3::new(-1.5, 0.0, -1.0), Quat::default()),
-        0.4,
+        TransformSequence::new(Vec3::new(-0.8, -0.2, -0.5), Quat::default()),
+        0.3,
         silver,
     )));
     hitables.push(Box::new(Sphere::new(
@@ -151,70 +138,14 @@ fn setup() -> (CameraHandle, World<Spectrum>) {
         gold_rough,
     )));
 
-    let camera_position_sequence: Sequence<[f32; 3]> = Sequence::new(
-        vec![0.0, 1.0, 3.0, 4.0, 5.0, 8.0, 9.0],
-        vec![
-            [0.0, 0.0, 1.5],
-            [0.0, 0.0, 1.0],
-            [0.0, 0.0, 0.5],
-            [0.1, 0.3, -0.5],
-            [0.1, 0.3, -1.5],
-            [-0.2, 0.3, -2.0],
-            [-0.2, -0.3, -0.5],
-            [0.0, 0.0, 1.0],
-            [0.0, 0.0, 1.5],
-        ],
-        minterpolate::InterpolationFunction::CatmullRomSpline,
-        false,
-    );
-
-    let camera_lookat_sequence: Sequence<[f32; 3]> = Sequence::new(
-        vec![0.0, 1.0, 3.0, 3.5, 5.0],
-        vec![
-            [-0.2, 0.1, -1.0],
-            [-0.2, 0.1, -1.0],
-            [-0.2, 0.1, -1.0],
-            [0.1, 0.3, -1.0],
-            [0.1, 0.3, -2.0],
-            [-0.2, 0.1, -1.0],
-            [-0.2, 0.1, -1.0],
-        ],
-        minterpolate::InterpolationFunction::CatmullRomSpline,
-        false,
-    );
-
-    let camera_focus_sequence: Sequence<[f32; 3]> = Sequence::new(
-        vec![0.0, 1.0, 3.0, 4.0, 5.0, 8.0],
-        vec![
-            [-0.2, 0.1, -1.0],
-            [-0.2, 0.1, -1.0],
-            [-0.2, 0.1, -1.0],
-            [0.1, 0.3, -1.0],
-            [0.1, 0.3, -1.5],
-            [-0.2, 0.1, -1.0],
-            [-0.2, 0.1, -1.0],
-            [-0.2, 0.1, -1.0],
-        ],
-        minterpolate::InterpolationFunction::CatmullRomSpline,
-        false,
-    );
-    let camera_aperture_sequence: Sequence<f32> = Sequence::new(
-        vec![0.0, 1.0, 3.0, 4.0, 5.0, 8.0],
-        vec![
-            0.0225, 0.0225, 0.0225, 0.0125, 0.0125, 0.0225, 0.0125, 0.0125,
-        ],
-        minterpolate::InterpolationFunction::CatmullRomSpline,
-        false,
-    );
-
     let camera = ThinLensCamera::new(
         RES.0 as f32 / RES.1 as f32,
         60.0,
-        camera_aperture_sequence,
-        camera_position_sequence,
-        camera_lookat_sequence,
+        0.035,
+        Vec3::new(0.0, 0.0, 1.0),
+        Vec3::new(0.0, 0.0, -1.0),
         Vec3::new(0.0, 1.0, 0.0),
-        camera_focus_sequence,
+        Vec3::new(-0.2, 0.0, -0.7),
     );
 
     let mut cameras = CameraStore::new();
@@ -249,6 +180,8 @@ fn main() {
     let frame_range = 0..1;
     let shutter_speed = 1.0 / 24.0;
 
+    let filter = BlackmanHarrisFilter::new(2.0);
+    // let filter = BoxFilter::default();
     let integrator = PathTracingIntegrator { max_bounces: 6 };
 
     for frame in frame_range {
@@ -260,7 +193,8 @@ fn main() {
         film.render_frame_into(
             &world,
             camera,
-            integrator,
+            &integrator,
+            &filter,
             Extent2u::new(32, 32),
             frame_start..frame_end,
             SAMPLES,
@@ -280,7 +214,7 @@ fn main() {
         film.save_to(
             &[ChannelKind::Color],
             "renders",
-            format!("frame{}", frame),
+            format!("frame{}_blackman", frame),
             false,
         )
         .unwrap();

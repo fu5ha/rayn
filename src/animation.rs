@@ -66,6 +66,7 @@ mod minterpolate_integration {
     }
 
     impl<T: InterpolationPrimitive + Clone + Send + Sync> Sequence<T> {
+        #[allow(dead_code)]
         pub fn new(
             inputs: Vec<f32>,
             outputs: Vec<T>,
