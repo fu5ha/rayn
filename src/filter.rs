@@ -1,3 +1,7 @@
+use vek::ops::Lerp;
+
+use crate::math::CDF;
+
 use std::f32::consts::PI;
 
 pub trait Filter: Copy + Clone + Send {
@@ -8,24 +12,11 @@ pub trait Filter: Copy + Clone + Send {
 #[derive(Clone, Copy)]
 pub struct BlackmanHarrisFilter {
     pub radius: f32,
-    pub samples: [f32; 16],
 }
 
 impl BlackmanHarrisFilter {
     pub fn new(radius: f32) -> Self {
-        let mut samples = [0.0; 16];
-        for (n, sample) in samples.iter_mut().enumerate() {
-            *sample = BlackmanHarrisFilter::evaluate(radius, (n as f32 / 15.0) * 0.5 + 0.5);
-        }
-        BlackmanHarrisFilter { radius, samples }
-    }
-
-    fn evaluate(radius: f32, p: f32) -> f32 {
-        if p.abs() > radius {
-            return 0.0;
-        }
-        let x = (p / radius).abs() * 0.5 + 0.5;
-        A0 - A1 * (TWOPI * x).cos() + A2 * (FOURPI * x).cos() + A3 * (SIXPI * x).cos()
+        BlackmanHarrisFilter { radius }
     }
 }
 
@@ -49,13 +40,11 @@ impl Filter for BlackmanHarrisFilter {
     }
 
     fn evaluate(&self, p: f32) -> f32 {
-        let x = (p / self.radius).abs();
-        if x >= self.radius {
-            0.0
-        } else {
-            let idx = (x * 15.0).floor() as usize;
-            self.samples[idx]
+        if p.abs() > self.radius {
+            return 0.0;
         }
+        let x = (p / self.radius).abs() * 0.5 + 0.5;
+        A0 - A1 * (TWOPI * x).cos() + A2 * (FOURPI * x).cos() + A3 * (SIXPI * x).cos()
     }
 }
 
@@ -114,13 +103,7 @@ impl Filter for MitchellNetravaliFilter {
     }
 
     fn evaluate(&self, p: f32) -> f32 {
-        let x = (p / self.radius).abs();
-        if x >= self.radius {
-            0.0
-        } else {
-            let idx = (x * 15.0).floor() as usize;
-            self.samples[idx]
-        }
+        MitchellNetravaliFilter::evaluate(self.radius, p, self.b, self.c)
     }
 }
 
@@ -198,5 +181,56 @@ impl Filter for LanczosSincFilter {
             let lanczos = LanczosSincFilter::sinc(x / self.tau);
             LanczosSincFilter::sinc(x) * lanczos
         }
+    }
+}
+
+const FILTER_TABLE_SIZE: usize = 512;
+
+pub struct FilterImportanceSampler {
+    inverse_cdf: [f32; FILTER_TABLE_SIZE],
+}
+
+impl FilterImportanceSampler {
+    /// Create a new filter importance sampler. The filter must not have any negative
+    /// lobe.
+    pub fn new<F: Filter>(filter: &F) -> Self {
+        let f_rad = filter.radius();
+
+        let mut cdf = CDF::new();
+
+        for n in 0..FILTER_TABLE_SIZE {
+            let t = n as f32 / (FILTER_TABLE_SIZE - 1) as f32;
+            let d = Lerp::lerp(0.0, f_rad, t);
+            cdf.insert(d, filter.evaluate(d));
+        }
+
+        cdf.prepare();
+
+        let mut inverse_cdf = [0.0; FILTER_TABLE_SIZE];
+
+        for n in 0..FILTER_TABLE_SIZE {
+            let u = n as f32 / (FILTER_TABLE_SIZE - 1) as f32;
+            let cdf_u = cdf.sample(u).unwrap();
+            inverse_cdf[n] = cdf_u.0;
+        }
+
+        FilterImportanceSampler { inverse_cdf }
+    }
+
+    /// Takes uniform sample on (0, 1) and importance samples it based on the
+    /// filter's PDF, giving an output in the range (-filter.radius, filter.radius)
+    pub fn sample(&self, u: f32) -> f32 {
+        // rescale to (-1, 1)
+        let u = 2.0 * (u - 0.5);
+
+        let mult = if u < 0.0 { -1.0 } else { 1.0 };
+
+        let u = u.abs().max(0.0).min(0.99999);
+
+        let idx_full = u * (FILTER_TABLE_SIZE - 1) as f32;
+        let idx = idx_full.floor() as usize;
+        let t = idx_full.fract();
+
+        mult * Lerp::lerp(self.inverse_cdf[idx], self.inverse_cdf[idx + 1], t)
     }
 }

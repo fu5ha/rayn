@@ -69,7 +69,8 @@ impl Integrator for PathTracingIntegrator {
                 let l = throughput
                     * S::from(Xyz::from(Rgb::from(Vec3::lerp(
                         Vec3::one(),
-                        Vec3::new(0.5, 0.7, 1.0),
+                        Vec3::one(),
+                        // Vec3::new(0.5, 0.7, 1.0),
                         t,
                     ))));
                 radiance += l;

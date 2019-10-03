@@ -233,7 +233,9 @@ impl<S: IsSpectrum> BSDF<S> for Refractive<S> {
         };
         let f0 = f0_from_ior(self.ior);
         let fresnel = f_schlick(saturate(cos), f0);
+
         let sample = Vec3::cosine_weighted_in_hemisphere(rng, self.roughness);
+
         let (f, pdf, bounce) = if rng.gen::<f32>() > fresnel {
             let refraction = wo.refracted(refract_norm, eta);
             if refraction != Vec3::zero() {

@@ -5,10 +5,10 @@ use rand::distributions::Uniform;
 use rand::prelude::*;
 
 use crate::camera::CameraHandle;
-use crate::filter::Filter;
+use crate::filter::{Filter, FilterImportanceSampler};
 use crate::hitable::Intersection;
 use crate::integrator::Integrator;
-use crate::math::{Aabr, Aabri, Aabru, Extent2u, Vec2, Vec2i, Vec2u, Vec3};
+use crate::math::{Aabru, Extent2u, Vec2, Vec2u, Vec3};
 use crate::spectrum::{IsSpectrum, Rgb, Xyz};
 use crate::world::World;
 
@@ -112,41 +112,20 @@ macro_rules! channel_storage_index {
     };
 }
 
-pub struct Tile<N: ArrayLength<ChannelTileStorage>, F> {
+pub struct Tile<N: ArrayLength<ChannelTileStorage>> {
     epoch: usize,
     channels: GenericArray<ChannelTileStorage, N>,
     raster_bounds: Aabru,
-    sample_bounds: Aabri,
+    raster_extent: Extent2u,
     screen_to_ndc_size: Vec2,
-    filter: F,
 }
 
-impl<N: ArrayLength<ChannelTileStorage>, F: Filter> Tile<N, F> {
-    pub fn new<IC>(
-        epoch: usize,
-        channels: IC,
-        res: Extent2u,
-        raster_bounds: Aabru,
-        filter: F,
-    ) -> Self
+impl<N: ArrayLength<ChannelTileStorage>> Tile<N> {
+    pub fn new<IC>(epoch: usize, channels: IC, res: Extent2u, raster_bounds: Aabru) -> Self
     where
         IC: std::iter::ExactSizeIterator<Item = ChannelKind>,
     {
         let screen_to_ndc_size = Vec2::new(1.0 / res.w as f32, 1.0 / res.h as f32);
-
-        let half_pixel = Vec2::new(0.5, 0.5);
-        let filter_radius = filter.radius();
-
-        let float_sample_bounds = Aabr {
-            min: Vec2::new(
-                raster_bounds.min.x as f32 - filter_radius,
-                raster_bounds.min.y as f32 - filter_radius,
-            ) + half_pixel,
-            max: Vec2::new(
-                raster_bounds.max.x as f32 + filter_radius,
-                raster_bounds.max.y as f32 + filter_radius,
-            ) + half_pixel,
-        };
 
         Tile {
             epoch,
@@ -155,85 +134,48 @@ impl<N: ArrayLength<ChannelTileStorage>, F: Filter> Tile<N, F> {
             )
             .expect("Incorrect number of channels passed to tile creation"),
             raster_bounds,
-            sample_bounds: Aabri {
-                min: Vec2i::new(
-                    float_sample_bounds.min.x.floor() as isize,
-                    float_sample_bounds.min.y.floor() as isize,
-                ),
-                max: Vec2i::new(
-                    float_sample_bounds.max.x.ceil() as isize,
-                    float_sample_bounds.max.y.ceil() as isize,
-                ),
-            },
+            raster_extent: raster_bounds.size(),
             screen_to_ndc_size,
-            filter,
         }
     }
 
     pub fn add_sample(
         &mut self,
-        sample_screen_coord: Vec2,
+        tile_coord: Vec2u,
         spect: Xyz,
         first_intersection: Option<Intersection>,
     ) {
-        let p_discrete = sample_screen_coord - Vec2::new(0.5, 0.5);
-        let filter_radius = self.filter.radius();
-        let sample_influence_bounds = Aabru {
-            min: Vec2u::new(
-                ((p_discrete.x - filter_radius).ceil() as isize)
-                    .max(self.raster_bounds.min.x as isize) as usize,
-                ((p_discrete.y - filter_radius).ceil() as isize)
-                    .max(self.raster_bounds.min.y as isize) as usize,
-            ),
-            max: Vec2u::new(
-                ((p_discrete.x + filter_radius).ceil() as isize)
-                    .min(self.raster_bounds.max.x as isize) as usize,
-                ((p_discrete.y + filter_radius).ceil() as isize)
-                    .min(self.raster_bounds.max.y as isize) as usize,
-            ),
-        };
+        let idx = tile_coord.x + tile_coord.y * self.raster_extent.w;
 
-        let width = self.raster_bounds.size().w;
-
-        for x in sample_influence_bounds.min.x..sample_influence_bounds.max.x {
-            for y in sample_influence_bounds.min.y..sample_influence_bounds.max.y {
-                let weight = self.filter.evaluate((x as f32 - p_discrete.x).abs())
-                    * self.filter.evaluate((y as f32 - p_discrete.y).abs());
-
-                let tile_pixel = Vec2u::new(x, y) - self.raster_bounds.min;
-                let idx = tile_pixel.x + tile_pixel.y * width;
-
-                for channel in self.channels.iter_mut() {
-                    match channel {
-                        ChannelTileStorage::Color(ref mut buf) => {
-                            let (col_sum, weight_sum) = &mut buf[idx];
-                            if let Some(_) = first_intersection {
-                                *col_sum += spect * weight;
-                            }
-                            *weight_sum += weight;
-                        }
-                        ChannelTileStorage::Background(ref mut buf) => {
-                            let (col_sum, weight_sum) = &mut buf[idx];
-                            if let None = first_intersection {
-                                *col_sum += spect * weight;
-                            }
-                            *weight_sum += weight;
-                        }
-                        ChannelTileStorage::Alpha(ref mut buf) => {
-                            let (col_sum, weight_sum) = &mut buf[idx];
-                            if let Some(_) = first_intersection {
-                                *col_sum += 1.0 * weight;
-                            }
-                            *weight_sum += weight;
-                        }
-                        ChannelTileStorage::WorldNormal(ref mut buf) => {
-                            let (col_sum, weight_sum) = &mut buf[idx];
-                            if let Some(isec) = first_intersection {
-                                *col_sum += isec.normal * weight;
-                            }
-                            *weight_sum += weight;
-                        }
+        for channel in self.channels.iter_mut() {
+            match channel {
+                ChannelTileStorage::Color(ref mut buf) => {
+                    let (col_sum, weight_sum) = &mut buf[idx];
+                    if let Some(_) = first_intersection {
+                        *col_sum += spect;
                     }
+                    *weight_sum += 1.0;
+                }
+                ChannelTileStorage::Background(ref mut buf) => {
+                    let (col_sum, weight_sum) = &mut buf[idx];
+                    if let None = first_intersection {
+                        *col_sum += spect;
+                    }
+                    *weight_sum += 1.0;
+                }
+                ChannelTileStorage::Alpha(ref mut buf) => {
+                    let (col_sum, weight_sum) = &mut buf[idx];
+                    if let Some(_) = first_intersection {
+                        *col_sum += 1.0;
+                    }
+                    *weight_sum += 1.0;
+                }
+                ChannelTileStorage::WorldNormal(ref mut buf) => {
+                    let (col_sum, weight_sum) = &mut buf[idx];
+                    if let Some(isec) = first_intersection {
+                        *col_sum += isec.normal;
+                    }
+                    *weight_sum += 1.0;
                 }
             }
         }
@@ -444,8 +386,8 @@ impl<'a, N: ArrayLength<ChannelStorage> + ArrayLength<ChannelTileStorage>> Film<
         &'a mut self,
         world: &World<S>,
         camera: CameraHandle,
-        integrator: I,
-        filter: F,
+        integrator: &I,
+        filter: &F,
         tile_size: Extent2u,
         time_range: Range<f32>,
         samples: usize,
@@ -477,27 +419,32 @@ impl<'a, N: ArrayLength<ChannelStorage> + ArrayLength<ChannelTileStorage>> Film<
                         channels.iter().map(|c| c.kind()),
                         self.res,
                         tile_bounds,
-                        filter,
                     );
                     tiles.push(tile);
                 }
             }
         }
 
+        let fis = FilterImportanceSampler::new(filter);
+
         self.integrate_tiles(tiles, |tile| {
             let mut rng = rand::thread_rng();
-            let uniform = Uniform::new(-0.5, 0.5);
+            let uniform = Uniform::new(0.0, 1.0);
 
             let arena = DynamicArena::<'_, NonSend>::new_bounded();
 
-            for x in tile.sample_bounds.min.x..tile.sample_bounds.max.x {
-                for y in tile.sample_bounds.min.y..tile.sample_bounds.max.y {
+            for x in tile.raster_bounds.min.x..tile.raster_bounds.max.x {
+                for y in tile.raster_bounds.min.y..tile.raster_bounds.max.y {
+                    let tile_coord = Vec2u::new(x, y) - tile.raster_bounds.min;
+
                     for _ in 0..samples {
                         // let raster_pixel = Vec2u::new(x, y);
                         // sampler.begin_pixel(raster_pixel);
 
                         let uv_samp = Vec2::new(uniform.sample(&mut rng), uniform.sample(&mut rng));
-                        let screen_coord = Vec2::new(x as f32 + 0.5, y as f32 + 0.5) + uv_samp;
+                        let fis_samp = Vec2::new(fis.sample(uv_samp.x), fis.sample(uv_samp.y));
+
+                        let screen_coord = Vec2::new(x as f32 + 0.5, y as f32 + 0.5) + fis_samp;
 
                         let ndc = tile.screen_to_ndc_size * screen_coord;
 
@@ -507,17 +454,16 @@ impl<'a, N: ArrayLength<ChannelStorage> + ArrayLength<ChannelTileStorage>> Film<
                         let (spect, first_intersection) =
                             integrator.integrate::<S>(world, ray, time, &mut rng, &arena);
 
-                        tile.add_sample(screen_coord, spect.into(), first_intersection);
+                        tile.add_sample(tile_coord, spect.into(), first_intersection);
                     }
                 }
             }
         });
     }
 
-    fn integrate_tiles<F, FN>(&mut self, tiles: Vec<Tile<N, F>>, integrate_tile: FN)
+    fn integrate_tiles<FN>(&mut self, tiles: Vec<Tile<N>>, integrate_tile: FN)
     where
-        F: Filter,
-        FN: FnOnce(&mut Tile<N, F>) + Send + Sync + Copy,
+        FN: FnOnce(&mut Tile<N>) + Send + Sync + Copy,
     {
         let num_tiles = tiles.len();
 
@@ -542,7 +488,7 @@ impl<'a, N: ArrayLength<ChannelStorage> + ArrayLength<ChannelTileStorage>> Film<
         self.progressive_epoch += 1;
     }
 
-    fn tile_finished<F: Filter>(&self, tile: Tile<N, F>, num_tiles: usize, tile_idx: usize) {
+    fn tile_finished(&self, tile: Tile<N>, num_tiles: usize, tile_idx: usize) {
         if self.progressive_epoch != tile.epoch {
             panic!(
                 "Epoch mismatch! Expected: {}, got: {}",

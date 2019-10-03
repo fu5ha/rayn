@@ -9,9 +9,12 @@ pub type Vec4 = vec::repr_c::Vec4<f32>;
 pub type Vec3 = vec::repr_c::Vec3<f32>;
 pub type Vec2 = vec::repr_c::Vec2<f32>;
 pub type Vec2u = vec::repr_c::Vec2<usize>;
+#[allow(dead_code)]
 pub type Vec2i = vec::repr_c::Vec2<isize>;
+#[allow(dead_code)]
 pub type Aabr = vek::geom::repr_c::Aabr<f32>;
 pub type Aabru = vek::geom::repr_c::Aabr<usize>;
+#[allow(dead_code)]
 pub type Aabri = vek::geom::repr_c::Aabr<isize>;
 pub type Extent2u = vek::vec::repr_c::Extent2<usize>;
 
@@ -96,4 +99,61 @@ pub fn f_schlick_c<S: IsSpectrum>(cos: f32, f0: S) -> S {
 
 pub fn saturate(v: f32) -> f32 {
     v.min(1.0).max(0.0)
+}
+
+pub struct CDF {
+    items: Vec<(f32, f32)>,
+    densities: Vec<f32>,
+    weight_sum: f32,
+    prepared: bool,
+}
+
+impl CDF {
+    pub fn new() -> Self {
+        CDF {
+            items: Vec::new(),
+            densities: Vec::new(),
+            weight_sum: 0.0,
+            prepared: false,
+        }
+    }
+
+    pub fn insert(&mut self, item: f32, weight: f32) {
+        self.items.push((item, weight));
+        self.weight_sum += weight;
+    }
+
+    pub fn prepare(&mut self) {
+        if self.prepared {
+            return;
+        }
+
+        for (_, weight) in self.items.iter_mut() {
+            *weight /= self.weight_sum;
+        }
+
+        let mut cum = 0.0;
+        for (_, weight) in self.items.iter() {
+            cum += *weight;
+            self.densities.push(cum);
+        }
+
+        for (&(_, weight), density) in self.items.iter().zip(self.densities.iter_mut()).rev() {
+            *density = 1.0;
+            if weight > 0.0 {
+                break;
+            }
+        }
+
+        self.prepared = true;
+    }
+
+    pub fn sample(&self, x: f32) -> Option<(f32, f32)> {
+        for (ret, density) in self.items.iter().zip(self.densities.iter()) {
+            if *density >= x {
+                return Some(*ret);
+            }
+        }
+        None
+    }
 }

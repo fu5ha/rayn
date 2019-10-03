@@ -49,10 +49,12 @@ impl Rgb {
         Rgb(VekRgb::new(r, g, b))
     }
 
+    #[allow(dead_code)]
     pub fn gamma_corrected(&self, gamma: f32) -> Self {
         Rgb(self.0.map(|x| x.powf(1.0 / gamma)))
     }
 
+    #[allow(dead_code)]
     pub fn saturated(&self) -> Rgb {
         Rgb(self.0.map(|x| Clamp::clamped01(x)))
     }
@@ -95,9 +97,12 @@ impl Xyz {
 impl From<Rgb> for Xyz {
     fn from(rgb: Rgb) -> Self {
         Xyz(Vec3 {
-            x: 0.412453 * rgb.r + 0.357580 * rgb.g + 0.180423 * rgb.b,
-            y: 0.212671 * rgb.r + 0.715160 * rgb.g + 0.072169 * rgb.b,
-            z: 0.019334 * rgb.r + 0.119193 * rgb.g + 0.950227 * rgb.b,
+            // x: 0.412453 * rgb.r + 0.357580 * rgb.g + 0.180423 * rgb.b,
+            // y: 0.212671 * rgb.r + 0.715160 * rgb.g + 0.072169 * rgb.b,
+            // z: 0.019334 * rgb.r + 0.119193 * rgb.g + 0.950227 * rgb.b,
+            x: 0.4360747 * rgb.r + 0.3850649 * rgb.g + 0.1430804 * rgb.b,
+            y: 0.2225045 * rgb.r + 0.7168786 * rgb.g + 0.0606169 * rgb.b,
+            z: 0.0139322 * rgb.r + 0.0971045 * rgb.g + 0.7141733 * rgb.b,
         })
     }
 }
@@ -105,9 +110,9 @@ impl From<Rgb> for Xyz {
 impl From<Xyz> for Rgb {
     fn from(xyz: Xyz) -> Self {
         Rgb::new(
-            3.240479 * xyz.x - 1.537150 * xyz.y - 0.498535 * xyz.z,
-            -0.969256 * xyz.x + 1.875991 * xyz.y + 0.041556 * xyz.z,
-            0.055648 * xyz.x - 0.204043 * xyz.y + 1.057311 * xyz.z,
+            3.1338561 * xyz.x - 1.6168667 * xyz.y - 0.4906146 * xyz.z,
+            -0.9787684 * xyz.x + 1.9161415 * xyz.y + 0.0334540 * xyz.z,
+            0.0719453 * xyz.x - 0.2289914 * xyz.y + 1.4052427 * xyz.z,
         )
     }
 }
