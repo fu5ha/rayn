@@ -25,7 +25,7 @@ impl<S, TR: Sequenced<Transform>> TracedSDF<S, TR> {
     }
 }
 
-impl<S: SDF<f32, Vec3> + Send + Sync, TR: Sequenced<Transform>> Hitable for TracedSDF<S, TR> {
+impl<S: Sdf<f32, Vec3> + Send + Sync, TR: Sequenced<Transform>> Hitable for TracedSDF<S, TR> {
     fn hit(&self, ray: &Ray, time: f32, t_range: ::std::ops::Range<f32>) -> Option<Intersection> {
         if let Some(_) = self.bounding_sphere.hit(ray, time, t_range.clone()) {
             let dist = self.sdf.dist(*ray.origin()).abs();

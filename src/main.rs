@@ -1,5 +1,5 @@
 use generic_array::typenum::U2;
-use sdfu::SDF;
+use sdfu::SdfExt;
 
 mod animation;
 mod camera;
@@ -63,14 +63,14 @@ fn setup() -> (CameraHandle, World<Rgb>) {
         ground,
     )));
     hitables.push(Box::new(TracedSDF::new(
-        sdfu::Sphere::new(0.45)
+        sdfu::Sphere::<f32>::new(0.45)
             .subtract(sdfu::Box::new(Vec3::new(0.25, 0.25, 1.5)))
             .union_smooth(
-                sdfu::Sphere::new(0.3).translate(Vec3::new(0.3, 0.3, 0.0)),
+                sdfu::Sphere::<f32>::new(0.3).translate(Vec3::new(0.3, 0.3, 0.0)),
                 0.1,
             )
             .union_smooth(
-                sdfu::Sphere::new(0.3).translate(Vec3::new(-0.3, 0.3, 0.0)),
+                sdfu::Sphere::<f32>::new(0.3).translate(Vec3::new(-0.3, 0.3, 0.0)),
                 0.1,
             )
             .subtract(
