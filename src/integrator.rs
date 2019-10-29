@@ -1,22 +1,29 @@
-use dynamic_arena::{DynamicArena, NonSend};
+use bumpalo::collections::Vec as BumpVec;
+use bumpalo::Bump;
 use rand::rngs::SmallRng;
 use rand::Rng;
 
-use crate::hitable::{Hitable, Intersection};
-use crate::math::Vec3;
-use crate::ray::Ray;
-use crate::spectrum::{IsSpectrum, Rgb};
+use crate::hitable::{HitStore, Intersection, WIntersection};
+use crate::material::{Material, MaterialHandle, BSDF};
+use crate::math::{Vec2u, Vec3};
+use crate::ray::{Ray, WRay};
+use crate::spectrum::Srgb;
 use crate::world::World;
 
+use wide::f32x4;
+
 pub trait Integrator: Send + Sync {
-    fn integrate<S: IsSpectrum>(
+    fn integrate(
         &self,
-        world: &World<S>,
-        ray: Ray,
-        time: f32,
+        world: &World,
         rng: &mut SmallRng,
-        arena: &DynamicArena<'_, NonSend>,
-    ) -> (S, Option<Intersection>);
+        depth: usize,
+        material: MaterialHandle,
+        intersection: WIntersection,
+        bump: &Bump,
+        spawned_rays: &mut BumpVec<Ray>,
+        output_samples: &mut BumpVec<(Vec2u, Srgb, f32)>,
+    );
 }
 
 #[derive(Clone, Copy)]
@@ -25,70 +32,64 @@ pub struct PathTracingIntegrator {
 }
 
 impl Integrator for PathTracingIntegrator {
-    fn integrate<S: IsSpectrum>(
+    fn integrate(
         &self,
-        world: &World<S>,
-        mut ray: Ray,
-        time: f32,
+        world: &World,
         rng: &mut SmallRng,
-        arena: &DynamicArena<'_, NonSend>,
-    ) -> (S, Option<Intersection>) {
-        let mut radiance = S::zero();
-        let mut throughput = S::one();
-        let mut first_intersection = None;
-        for bounce in 0.. {
-            if let Some(mut intersection) = world.hitables.hit(&ray, time, 0.001..1000.0) {
-                let wi = *ray.dir();
-                let material = world.materials.get(intersection.material);
-
-                let bsdf = material.setup_scattering_functions(&mut intersection, &arena);
-
-                radiance += bsdf.le(-wi, &mut intersection) * throughput;
-                let scattering_event = bsdf.scatter(wi, &mut intersection, rng);
-
-                if bounce == 0 {
-                    first_intersection = Some(intersection);
-                }
-
-                if let Some(se) = scattering_event {
-                    let ndl = se.wi.dot(intersection.normal).abs();
-                    if ndl == 0.0 || se.pdf == 0.0 || se.f.is_black() {
-                        break;
-                    }
-                    throughput *= se.f / se.pdf * ndl;
-                    if throughput.is_nan() {
-                        break;
-                    }
-                    ray = intersection.create_ray(se.wi);
-                } else {
-                    break;
-                }
-            } else {
-                let dir = ray.dir();
-                let t = 0.5 * (dir.y + 1.0);
-
-                let l = throughput
-                    * S::from(Rgb::from(Vec3::lerp(
-                        Vec3::one(),
-                        Vec3::new(0.5, 0.7, 1.0),
-                        t,
-                    )));
-                radiance += l;
-                break;
-            }
-
-            if bounce >= self.max_bounces {
-                break;
-            }
-
-            if bounce > 2 {
-                let roulette_factor = (1.0 - throughput.max_channel()).max(0.05);
-                if rng.gen::<f32>() < roulette_factor {
-                    break;
-                }
-                throughput /= 1.0 - roulette_factor;
-            }
+        depth: usize,
+        material: MaterialHandle,
+        mut intersection: WIntersection,
+        bump: &Bump,
+        spawned_rays: &mut BumpVec<Ray>,
+        output_samples: &mut BumpVec<(Vec2u, Srgb, f32)>,
+    ) {
+        if depth == 0 {
+            intersection.ray.alpha = f32x4::from(1.0);
         }
-        (radiance, first_intersection)
+
+        let wi = intersection.ray.dir;
+        let material = world.materials.get(material);
+
+        let bsdf = material.get_bsdf_at(&mut intersection, bump);
+
+        intersection.ray.radiance += bsdf.le(-wi, &intersection) * intersection.ray.throughput;
+
+        let scattering_event = bsdf.scatter(wi, &intersection, rng);
+
+        let ndl = scattering_event.wi.dot(intersection.normal).abs();
+
+        let mut new_throughput =
+            intersection.ray.throughput * scattering_event.f / scattering_event.pdf * ndl;
+
+        let roulette_factor = if depth > 2 {
+            let roulette_factor = (f32x4::from(1.0) - intersection.ray.throughput.max_channel())
+                .max(f32x4::from(0.05));
+
+            new_throughput /= f32x4::from(1.0) - roulette_factor;
+
+            roulette_factor
+        } else {
+            f32x4::from(0.0)
+        };
+
+        let mut new_rays: [Ray; 4] = intersection.create_rays(scattering_event.wi).into();
+        let throughputs: [Srgb; 4] = new_throughput.into();
+
+        for ((ray, new_throughput), roulette_factor) in new_rays
+            .iter_mut()
+            .zip(throughputs.into_iter())
+            .zip(roulette_factor.as_ref().iter())
+        {
+            if depth >= self.max_bounces || rng.gen::<f32>() < *roulette_factor {
+                output_samples.push((ray.tile_coord, ray.radiance, ray.alpha));
+                break;
+            }
+
+            if !new_throughput.is_nan() {
+                ray.throughput = *new_throughput;
+            }
+
+            spawned_rays.push(*ray);
+        }
     }
 }

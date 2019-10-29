@@ -1,50 +1,42 @@
+use crate::spectrum::WSrgb;
+
 use std::f32::consts::PI;
+pub use wide::f32x4;
 
 use rand::rngs::SmallRng;
 use rand::Rng;
 use vek::vec;
 
-use crate::spectrum::IsSpectrum;
-
-pub type Vec4 = vec::repr_c::Vec4<f32>;
-pub type Vec3 = vec::repr_c::Vec3<f32>;
-pub type Vec2 = vec::repr_c::Vec2<f32>;
+pub type Vec3 = widehard::Vec3;
+pub type Wec3 = widehard::Wec3;
+pub type Vec2 = widehard::Vec2;
+pub type Wec2 = widehard::Wec2;
 pub type Vec2u = vec::repr_c::Vec2<usize>;
-#[allow(dead_code)]
-pub type Vec2i = vec::repr_c::Vec2<isize>;
-#[allow(dead_code)]
-pub type Aabr = vek::geom::repr_c::Aabr<f32>;
 pub type Aabru = vek::geom::repr_c::Aabr<usize>;
-#[allow(dead_code)]
-pub type Aabri = vek::geom::repr_c::Aabr<isize>;
 pub type Extent2u = vek::vec::repr_c::Extent2<usize>;
 
-pub type Mat3 = vek::mat::repr_c::Mat3<f32>;
-pub type CVec3<T> = vec::repr_c::Vec3<T>;
+pub type Mat3 = widehard::Mat3;
+pub type Wat3 = widehard::Wat3;
 
-pub type Quat = vek::quaternion::repr_c::Quaternion<f32>;
-
-#[derive(Clone, Copy, Debug)]
+#[derive(Clone, Copy)]
 pub struct Transform {
-    pub position: Vec3,
-    pub orientation: Quat,
+    pub position: Wec3,
+    // pub orientation: Quat,
 }
 
-pub trait OrthonormalBasis: Sized {
-    fn get_orthonormal_basis(&self) -> Mat3;
+pub trait OrthonormalBasis<M>: Sized {
+    fn get_orthonormal_basis(&self) -> M;
 }
 
-impl OrthonormalBasis for Vec3 {
-    fn get_orthonormal_basis(&self) -> Mat3 {
+impl OrthonormalBasis<Wat3> for Wec3 {
+    fn get_orthonormal_basis(&self) -> Wat3 {
         let nor = *self;
         let ks = nor.z.signum();
-        let ka = 1.0 / (1.0 + nor.z.abs());
+        let ka = f32x4::from(1.0) / (f32x4::from(1.0) + nor.z.abs());
         let kb = -ks * nor.x * nor.y * ka;
-        let uu = Vec3::new(1.0 - nor.x * nor.x * ka, ks * kb, -ks * nor.x);
-        let vv = Vec3::new(kb, ks - nor.y * nor.y * ka * ks, -nor.y);
-        Mat3 {
-            cols: CVec3::new(uu, vv, nor),
-        }
+        let uu = Wec3::new(f32x4::from(1.0) - nor.x * nor.x * ka, ks * kb, -ks * nor.x);
+        let vv = Wec3::new(kb, ks - nor.y * nor.y * ka * ks, -nor.y);
+        Wat3::new(uu, vv, nor)
     }
 }
 
@@ -52,11 +44,23 @@ pub trait RandomSample2d {
     fn rand_in_unit_disk(rng: &mut SmallRng) -> Self;
 }
 
-impl RandomSample2d for Vec2 {
+impl RandomSample2d for Wec2 {
     fn rand_in_unit_disk(rng: &mut SmallRng) -> Self {
-        let rho = rng.gen::<f32>().sqrt();
-        let theta = rng.gen_range(0.0, std::f32::consts::PI * 2.0);
-        Vec2::new(rho * theta.cos(), rho * theta.sin())
+        let rho = [
+            rng.gen::<f32>().sqrt(),
+            rng.gen::<f32>().sqrt(),
+            rng.gen::<f32>().sqrt(),
+            rng.gen::<f32>().sqrt(),
+        ];
+        let rho = f32x4::from(rho);
+        let theta = [
+            rng.gen_range(0.0, std::f32::consts::PI * 2.0),
+            rng.gen_range(0.0, std::f32::consts::PI * 2.0),
+            rng.gen_range(0.0, std::f32::consts::PI * 2.0),
+            rng.gen_range(0.0, std::f32::consts::PI * 2.0),
+        ];
+        let theta = f32x4::from(theta);
+        Wec2::new(rho * theta.cos(), rho * theta.sin())
     }
 }
 
@@ -66,40 +70,52 @@ pub trait RandomSample3d<T> {
     fn cosine_weighted_in_hemisphere(rng: &mut SmallRng, factor: T) -> Self;
 }
 
-impl RandomSample3d<f32> for Vec3 {
+impl RandomSample3d<f32x4> for Wec3 {
     fn rand_in_unit_sphere(rng: &mut SmallRng) -> Self {
-        let theta = rng.gen_range(0f32, 2f32 * PI);
-        let phi = rng.gen_range(-1f32, 1f32);
-        let ophisq = (1.0 - phi * phi).sqrt();
-        Vec3::new(ophisq * theta.cos(), ophisq * theta.sin(), phi)
+        let theta = [
+            rng.gen_range(0f32, 2f32 * PI),
+            rng.gen_range(0f32, 2f32 * PI),
+            rng.gen_range(0f32, 2f32 * PI),
+            rng.gen_range(0f32, 2f32 * PI),
+        ];
+        let theta = f32x4::from(theta);
+        let phi = [
+            rng.gen_range(-1f32, 1f32),
+            rng.gen_range(-1f32, 1f32),
+            rng.gen_range(-1f32, 1f32),
+            rng.gen_range(-1f32, 1f32),
+        ];
+        let phi = f32x4::from(phi);
+        let ophisq = (f32x4::from(1.0) - phi * phi).sqrt();
+        Wec3::new(ophisq * theta.cos(), ophisq * theta.sin(), phi)
     }
 
     fn rand_on_unit_sphere(rng: &mut SmallRng) -> Self {
         Self::rand_in_unit_sphere(rng).normalized()
     }
 
-    fn cosine_weighted_in_hemisphere(rng: &mut SmallRng, constriction: f32) -> Self {
-        let xy = Vec2::rand_in_unit_disk(rng) * constriction;
-        let z = (1.0 - xy.magnitude_squared()).sqrt();
-        Vec3::new(xy.x, xy.y, z)
+    fn cosine_weighted_in_hemisphere(rng: &mut SmallRng, constriction: f32x4) -> Self {
+        let xy = Wec2::rand_in_unit_disk(rng) * constriction;
+        let z = (f32x4::from(1.0) - xy.mag_sq()).sqrt();
+        Wec3::new(xy.x, xy.y, z)
     }
 }
 
-pub fn f0_from_ior(ior: f32) -> f32 {
-    let f0 = (1.0 - ior) / (1.0 + ior);
+pub fn f0_from_ior(ior: f32x4) -> f32x4 {
+    let f0 = (f32x4::from(1.0) - ior) / (f32x4::from(1.0) + ior);
     f0 * f0
 }
 
-pub fn f_schlick(cos: f32, f0: f32) -> f32 {
-    f0 + (1.0 - f0) * (1.0 - cos).powi(5)
+pub fn f_schlick(cos: f32x4, f0: f32x4) -> f32x4 {
+    f0 + (f32x4::from(1.0) - f0) * (f32x4::from(1.0) - cos).powi([5, 5, 5, 5])
 }
 
-pub fn f_schlick_c<S: IsSpectrum>(cos: f32, f0: S) -> S {
-    f0 + (S::one() - f0) * (1.0 - cos).powi(5)
+pub fn f_schlick_c(cos: f32x4, f0: WSrgb) -> WSrgb {
+    f0 + (WSrgb::one() - f0) * (f32x4::from(1.0) - cos).powi([5, 5, 5, 5])
 }
 
-pub fn saturate(v: f32) -> f32 {
-    v.min(1.0).max(0.0)
+pub fn saturate(v: f32x4) -> f32x4 {
+    v.min(f32x4::from(1.0)).max(f32x4::from(0.0))
 }
 
 pub struct CDF {

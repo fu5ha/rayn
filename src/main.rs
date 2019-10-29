@@ -1,5 +1,5 @@
 use generic_array::typenum::U2;
-use sdfu::SdfExt;
+use sdfu::SDF;
 
 mod animation;
 mod camera;
@@ -15,128 +15,113 @@ mod spectrum;
 mod sphere;
 mod world;
 
-use animation::TransformSequence;
 use camera::{CameraHandle, CameraStore, ThinLensCamera};
 use film::{ChannelKind, Film};
 use filter::{BlackmanHarrisFilter, BoxFilter};
 use hitable::HitableStore;
 use integrator::PathTracingIntegrator;
-use material::{Checkerboard3d, Dielectric, Emissive, MaterialStore, Metal, Refractive};
-use math::{Extent2u, Quat, Vec3};
+use material::{Dielectric, MaterialStore};
+use math::{Extent2u, Vec3, Wec3};
 use sdf::TracedSDF;
-use spectrum::Rgb;
+use spectrum::{Srgb, WSrgb};
 use sphere::Sphere;
 use world::World;
 
 use std::time::Instant;
 
+use wide::f32x4;
+
 const RES: (usize, usize) = (1280, 720);
-const SAMPLES: usize = 64;
+const SAMPLES: usize = 1;
 
-fn setup() -> (CameraHandle, World<Rgb>) {
-    let white_emissive = Emissive::new(
-        Rgb::new(1.0, 1.0, 1.5),
-        Dielectric::new(Rgb::new(0.5, 0.5, 0.5), 0.0),
-    );
-    let checkerboard = Checkerboard3d::new(
-        Vec3::new(0.15, 0.15, 0.15),
-        Dielectric::new(Rgb::new(0.9, 0.35, 0.55), 0.0),
-        Refractive::new(Rgb::new(0.9, 0.9, 0.9), 0.0, 1.5),
-    );
-
+fn setup() -> (CameraHandle, World) {
     let mut materials = MaterialStore::new();
-    let checkerboard = materials.add_material(Box::new(checkerboard));
-    let white_emissive = materials.add_material(Box::new(white_emissive));
-    let ground = materials.add_material(Box::new(Dielectric::new(Rgb::new(0.25, 0.2, 0.35), 0.3)));
-    let gold = materials.add_material(Box::new(Metal::new(Rgb::new(1.0, 0.9, 0.5), 0.0)));
-    let silver = materials.add_material(Box::new(Metal::new(Rgb::new(0.9, 0.9, 0.9), 0.05)));
-    let gold_rough = materials.add_material(Box::new(Metal::new(Rgb::new(1.0, 0.9, 0.5), 0.5)));
-    let glass =
-        materials.add_material(Box::new(Refractive::new(Rgb::new(0.9, 0.9, 0.9), 0.0, 1.5)));
-    let glass_rough =
-        materials.add_material(Box::new(Refractive::new(Rgb::new(0.9, 0.9, 0.9), 0.5, 1.5)));
+    let ground = materials.add_material(Dielectric::new(
+        WSrgb::splat(Srgb::new(0.25, 0.2, 0.35)),
+        f32x4::from(0.3),
+    ));
 
     let mut hitables = HitableStore::new();
     hitables.push(Box::new(Sphere::new(
-        TransformSequence::new(Vec3::new(0.0, -200.5, -1.0), Quat::default()),
+        Vec3::new(0.0, -200.5, -1.0),
         200.0,
         ground,
     )));
-    hitables.push(Box::new(TracedSDF::new(
-        sdfu::Sphere::<f32>::new(0.45)
-            .subtract(sdfu::Box::new(Vec3::new(0.25, 0.25, 1.5)))
-            .union_smooth(
-                sdfu::Sphere::<f32>::new(0.3).translate(Vec3::new(0.3, 0.3, 0.0)),
-                0.1,
-            )
-            .union_smooth(
-                sdfu::Sphere::<f32>::new(0.3).translate(Vec3::new(-0.3, 0.3, 0.0)),
-                0.1,
-            )
-            .subtract(
-                sdfu::Box::new(Vec3::new(0.125, 0.125, 1.5)).translate(Vec3::new(-0.3, 0.3, 0.0)),
-            )
-            .subtract(
-                sdfu::Box::new(Vec3::new(0.125, 0.125, 1.5)).translate(Vec3::new(0.3, 0.3, 0.0)),
-            )
-            .subtract(sdfu::Box::new(Vec3::new(1.5, 0.1, 0.1)).translate(Vec3::new(0.0, 0.3, 0.0)))
-            .subtract(sdfu::Box::new(Vec3::new(0.2, 2.0, 0.2)))
-            .translate(Vec3::new(-0.2, 0.0, -1.0)),
-        Sphere::new(
-            TransformSequence::new(Vec3::new(-0.2, 0.0, -1.0), Quat::default()),
-            1.0,
-            ground,
-        ),
-        checkerboard,
-    )));
+    // hitables.push(Box::new(TracedSDF::new(
+    //     sdfu::Sphere::<f32>::new(0.45)
+    //         .subtract(sdfu::Box::new(Vec3::new(0.25, 0.25, 1.5)))
+    //         .union_smooth(
+    //             sdfu::Sphere::<f32>::new(0.3).translate(Vec3::new(0.3, 0.3, 0.0)),
+    //             0.1,
+    //         )
+    //         .union_smooth(
+    //             sdfu::Sphere::<f32>::new(0.3).translate(Vec3::new(-0.3, 0.3, 0.0)),
+    //             0.1,
+    //         )
+    //         .subtract(
+    //             sdfu::Box::new(Vec3::new(0.125, 0.125, 1.5)).translate(Vec3::new(-0.3, 0.3, 0.0)),
+    //         )
+    //         .subtract(
+    //             sdfu::Box::new(Vec3::new(0.125, 0.125, 1.5)).translate(Vec3::new(0.3, 0.3, 0.0)),
+    //         )
+    //         .subtract(sdfu::Box::new(Vec3::new(1.5, 0.1, 0.1)).translate(Vec3::new(0.0, 0.3, 0.0)))
+    //         .subtract(sdfu::Box::new(Vec3::new(0.2, 2.0, 0.2)))
+    //         .translate(Vec3::new(-0.2, 0.0, -1.0)),
+    //     Sphere::new(
+    //         TransformSequence::new(Vec3::new(-0.2, 0.0, -1.0), Quat::default()),
+    //         1.0,
+    //         ground,
+    //     ),
+    //     checkerboard,
+    // )));
     hitables.push(Box::new(Sphere::new(
-        TransformSequence::new(Vec3::new(-0.2, -0.05, -1.0), Quat::default()),
-        0.15,
-        white_emissive,
+        Vec3::new(-0.2, -0.05, -1.0),
+        0.5,
+        ground,
     )));
-    hitables.push(Box::new(Sphere::new(
-        TransformSequence::new(Vec3::new(1.0, -0.25, -1.0), Quat::default()),
-        0.25,
-        gold,
-    )));
-    hitables.push(Box::new(Sphere::new(
-        TransformSequence::new(Vec3::new(-0.8, -0.2, -0.5), Quat::default()),
-        0.3,
-        silver,
-    )));
-    hitables.push(Box::new(Sphere::new(
-        TransformSequence::new(
-            |t: f32| -> Vec3 {
-                Vec3::new(
-                    0.2 - (t * std::f32::consts::PI).sin() * 0.15,
-                    -0.4,
-                    -0.35 - (t * std::f32::consts::PI).cos() * 0.15,
-                )
-            },
-            Quat::default(),
-        ),
-        0.1,
-        glass,
-    )));
-    hitables.push(Box::new(Sphere::new(
-        TransformSequence::new(Vec3::new(-0.25, -0.375, -0.15), Quat::default()),
-        0.125,
-        glass_rough,
-    )));
-    hitables.push(Box::new(Sphere::new(
-        TransformSequence::new(
-            |t: f32| -> Vec3 {
-                Vec3::new(
-                    -0.5 + (2.0 * t * std::f32::consts::PI).cos() * 1.5,
-                    -0.375,
-                    -0.5 - (2.0 * t * std::f32::consts::PI).sin() * 1.5,
-                )
-            },
-            Quat::default(),
-        ),
-        0.125,
-        gold_rough,
-    )));
+    // hitables.push(Box::new(Sphere::new(
+    //     TransformSequence::new(Vec3::new(1.0, -0.25, -1.0), Quat::default()),
+    //     0.25,
+    //     gold,
+    // )));
+    // hitables.push(Box::new(Sphere::new(
+    //     TransformSequence::new(Vec3::new(-0.8, -0.2, -0.5), Quat::default()),
+    //     0.3,
+    //     silver,
+    // )));
+    // hitables.push(Box::new(Sphere::new(
+    //     TransformSequence::new(
+    //         |t: f32| -> Vec3 {
+    //             Vec3::new(
+    //                 0.2 - (t * std::f32::consts::PI).sin() * 0.15,
+    //                 -0.4,
+    //                 -0.35 - (t * std::f32::consts::PI).cos() * 0.15,
+    //             )
+    //         },
+    //         Quat::default(),
+    //     ),
+    //     0.1,
+    //     glass,
+    // )));
+    // hitables.push(Box::new(Sphere::new(
+    //     TransformSequence::new(Vec3::new(-0.25, -0.375, -0.15), Quat::default()),
+    //     0.125,
+    //     glass_rough,
+    // )));
+    // hitables.push(Box::new(Sphere::new(
+    //     TransformSequence::new(
+    //         |t: f32| -> Vec3 {
+    //             Vec3::new(
+    //                 -0.5 + (2.0 * t * std::f32::consts::PI).cos() * 1.5,
+    //                 -0.375,
+    //                 -0.5 - (2.0 * t * std::f32::consts::PI).sin() * 1.5,
+    //             )
+    //         },
+    //         Quat::default(),
+    //     ),
+    //     0.125,
+    //     gold_rough,
+    // )));
 
     let camera = ThinLensCamera::new(
         RES.0 as f32 / RES.1 as f32,
@@ -182,7 +167,7 @@ fn main() {
 
     let filter = BlackmanHarrisFilter::new(2.0);
     // let filter = BoxFilter::default();
-    let integrator = PathTracingIntegrator { max_bounces: 6 };
+    let integrator = PathTracingIntegrator { max_bounces: 2 };
 
     for frame in frame_range {
         let start = Instant::now();

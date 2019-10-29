@@ -1,14 +1,18 @@
-use dynamic_arena::{DynamicArena, NonSend};
+use bumpalo::{collections::Vec as BumpVec, Bump};
+
 use generic_array::{ArrayLength, GenericArray};
 
 use rand::prelude::*;
 
+use wide::f32x4;
+
 use crate::camera::CameraHandle;
 use crate::filter::{Filter, FilterImportanceSampler};
-use crate::hitable::Intersection;
+use crate::hitable::{HitStore, Intersection};
 use crate::integrator::Integrator;
-use crate::math::{Aabru, Extent2u, Vec2, Vec2u, Vec3};
-use crate::spectrum::{IsSpectrum, Rgb};
+use crate::math::{Aabru, Extent2u, Vec2, Vec2u, Vec3, Wec2, Wec3};
+use crate::ray::{Ray, WRay};
+use crate::spectrum::{Srgb, WSrgb};
 use crate::world::World;
 
 use std::collections::HashMap;
@@ -84,21 +88,21 @@ macro_rules! declare_channels {
 
 declare_channels! {
     Color => {
-        storage: Rgb,
-        init: Rgb::zero(),
+        storage: Srgb,
+        init: Srgb::zero(),
     },
     Alpha => {
         storage: f32,
         init: 0f32,
     },
     Background => {
-        storage: Rgb,
-        init: Rgb::zero(),
-    },
-    WorldNormal => {
-        storage: Vec3,
-        init: Vec3::zero(),
+        storage: Srgb,
+        init: Srgb::zero(),
     }
+    // WorldNormal => {
+    //     storage: Vec3,
+    //     init: Vec3::zero(),
+    // }
 }
 
 macro_rules! channel_storage_index {
@@ -146,41 +150,30 @@ impl<N: ArrayLength<ChannelTileStorage>> Tile<N> {
         }
     }
 
-    pub fn add_sample(
-        &mut self,
-        tile_coord: Vec2u,
-        spect: Rgb,
-        first_intersection: Option<Intersection>,
-    ) {
+    pub fn add_sample(&mut self, tile_coord: Vec2u, spect: Srgb, first_intersection: bool) {
+        // println!("{:#?}", spect);
         let idx = tile_coord.x + tile_coord.y * self.raster_extent.w;
 
         for channel in self.channels.iter_mut() {
             match channel {
                 ChannelTileStorage::Color(ref mut buf) => {
                     let (col_sum, weight_sum) = &mut buf[idx];
-                    if let Some(_) = first_intersection {
+                    if first_intersection {
                         *col_sum += spect;
                     }
                     *weight_sum += 1.0;
                 }
                 ChannelTileStorage::Background(ref mut buf) => {
                     let (col_sum, weight_sum) = &mut buf[idx];
-                    if let None = first_intersection {
+                    if !first_intersection {
                         *col_sum += spect;
                     }
                     *weight_sum += 1.0;
                 }
                 ChannelTileStorage::Alpha(ref mut buf) => {
                     let (col_sum, weight_sum) = &mut buf[idx];
-                    if let Some(_) = first_intersection {
+                    if first_intersection {
                         *col_sum += 1.0;
-                    }
-                    *weight_sum += 1.0;
-                }
-                ChannelTileStorage::WorldNormal(ref mut buf) => {
-                    let (col_sum, weight_sum) = &mut buf[idx];
-                    if let Some(isec) = first_intersection {
-                        *col_sum += isec.normal;
                     }
                     *weight_sum += 1.0;
                 }
@@ -252,11 +245,11 @@ impl<'a, N: ArrayLength<ChannelStorage>> Film<N> {
                                 let idx = x as usize + (self.res.h - 1 - y as usize) * self.res.w;
                                 let col = color_buf[idx];
                                 let a = alpha_buf[idx];
-                                let rgb = Rgb::from(col).saturated().gamma_corrected(2.2) * a;
+                                let rgb = Srgb::from(col).saturated().gamma_corrected(2.2) * a;
                                 *pixel = image::Rgba([
-                                    (rgb.r * 255.0).min(255.0).max(0.0) as u8,
-                                    (rgb.g * 255.0).min(255.0).max(0.0) as u8,
-                                    (rgb.b * 255.0).min(255.0).max(0.0) as u8,
+                                    (rgb.x * 255.0).min(255.0).max(0.0) as u8,
+                                    (rgb.y * 255.0).min(255.0).max(0.0) as u8,
+                                    (rgb.z * 255.0).min(255.0).max(0.0) as u8,
                                     (a * 255.0).min(255.0).max(0.0) as u8,
                                 ]);
                             }
@@ -275,11 +268,11 @@ impl<'a, N: ArrayLength<ChannelStorage>> Film<N> {
                                 let i = x as usize + (self.res.h - 1 - y as usize) * self.res.w;
                                 let col = color_buf[i];
                                 let bg = bg_buf[i];
-                                let rgb = Rgb::from(col + bg).saturated().gamma_corrected(2.2);
+                                let rgb = Srgb::from(col + bg).saturated().gamma_corrected(2.2);
                                 *pixel = image::Rgb([
-                                    (rgb.r * 255.0).min(255.0).max(0.0) as u8,
-                                    (rgb.g * 255.0).min(255.0).max(0.0) as u8,
-                                    (rgb.b * 255.0).min(255.0).max(0.0) as u8,
+                                    (rgb.x * 255.0).min(255.0).max(0.0) as u8,
+                                    (rgb.y * 255.0).min(255.0).max(0.0) as u8,
+                                    (rgb.z * 255.0).min(255.0).max(0.0) as u8,
                                 ]);
                             }
                             let filename = output_folder
@@ -294,11 +287,11 @@ impl<'a, N: ArrayLength<ChannelStorage>> Film<N> {
                                 image::RgbImage::new(self.res.w as u32, self.res.h as u32);
                             for (x, y, pixel) in img.enumerate_pixels_mut() {
                                 let idx = x as usize + (self.res.h - 1 - y as usize) * self.res.w;
-                                let rgb = Rgb::from(color_buf[idx]).gamma_corrected(2.2);
+                                let rgb = Srgb::from(color_buf[idx]).gamma_corrected(2.2);
                                 *pixel = image::Rgb([
-                                    (rgb.r * 255.0).min(255.0).max(0.0) as u8,
-                                    (rgb.g * 255.0).min(255.0).max(0.0) as u8,
-                                    (rgb.b * 255.0).min(255.0).max(0.0) as u8,
+                                    (rgb.x * 255.0).min(255.0).max(0.0) as u8,
+                                    (rgb.y * 255.0).min(255.0).max(0.0) as u8,
+                                    (rgb.z * 255.0).min(255.0).max(0.0) as u8,
                                 ]);
                             }
                             let filename = output_folder
@@ -326,11 +319,11 @@ impl<'a, N: ArrayLength<ChannelStorage>> Film<N> {
                     let mut img = image::RgbImage::new(self.res.w as u32, self.res.h as u32);
                     for (x, y, pixel) in img.enumerate_pixels_mut() {
                         let idx = x as usize + (self.res.h - 1 - y as usize) * self.res.w;
-                        let rgb = Rgb::from(buf[idx]).saturated().gamma_corrected(2.2);
+                        let rgb = Srgb::from(buf[idx]).saturated().gamma_corrected(2.2);
                         *pixel = image::Rgb([
-                            (rgb.r * 255.0).min(255.0).max(0.0) as u8,
-                            (rgb.g * 255.0).min(255.0).max(0.0) as u8,
-                            (rgb.b * 255.0).min(255.0).max(0.0) as u8,
+                            (rgb.x * 255.0).min(255.0).max(0.0) as u8,
+                            (rgb.y * 255.0).min(255.0).max(0.0) as u8,
+                            (rgb.z * 255.0).min(255.0).max(0.0) as u8,
                         ]);
                     }
                     let filename = output_folder
@@ -339,28 +332,28 @@ impl<'a, N: ArrayLength<ChannelStorage>> Film<N> {
                     println!("Saving to {}...", filename.display());
                     img.save(filename).unwrap();
                 }
-                ChannelKind::WorldNormal => {
-                    let idx = *self.channel_indices.get(&ChannelKind::WorldNormal).ok_or(
-                        String::from("Attempted to write WorldNormal channel but it didn't exist"),
-                    )?;
-                    let buf = channel_storage_index!(channels, WorldNormal, idx);
-                    let mut img = image::RgbImage::new(self.res.w as u32, self.res.h as u32);
-                    for (x, y, pixel) in img.enumerate_pixels_mut() {
-                        let idx = x as usize + (self.res.h - 1 - y as usize) * self.res.w;
-                        let vec = buf[idx];
-                        let rgb = Rgb::from(vec * 0.5 + Vec3::new(0.5, 0.5, 0.5));
-                        *pixel = image::Rgb([
-                            (rgb.r * 255.0).min(255.0).max(0.0) as u8,
-                            (rgb.g * 255.0).min(255.0).max(0.0) as u8,
-                            (rgb.b * 255.0).min(255.0).max(0.0) as u8,
-                        ]);
-                    }
-                    let filename = output_folder
-                        .as_ref()
-                        .join(format!("{}_normal.png", base_name.clone()));
-                    println!("Saving to {}...", filename.display());
-                    img.save(filename).unwrap();
-                }
+                // ChannelKind::WorldNormal => {
+                //     let idx = *self.channel_indices.get(&ChannelKind::WorldNormal).ok_or(
+                //         String::from("Attempted to write WorldNormal channel but it didn't exist"),
+                //     )?;
+                //     let buf = channel_storage_index!(channels, WorldNormal, idx);
+                //     let mut img = image::RgbImage::new(self.res.w as u32, self.res.h as u32);
+                //     for (x, y, pixel) in img.enumerate_pixels_mut() {
+                //         let idx = x as usize + (self.res.h - 1 - y as usize) * self.res.w;
+                //         let vec = buf[idx];
+                //         let rgb = Srgb::from(vec * 0.5 + Vec3::new(0.5, 0.5, 0.5));
+                //         *pixel = image::Rgb([
+                //             (rgb.x * 255.0).min(255.0).max(0.0) as u8,
+                //             (rgb.y * 255.0).min(255.0).max(0.0) as u8,
+                //             (rgb.z * 255.0).min(255.0).max(0.0) as u8,
+                //         ]);
+                //     }
+                //     let filename = output_folder
+                //         .as_ref()
+                //         .join(format!("{}_normal.png", base_name.clone()));
+                //     println!("Saving to {}...", filename.display());
+                //     img.save(filename).unwrap();
+                // }
                 ChannelKind::Alpha => {
                     let idx =
                         *self
@@ -389,9 +382,9 @@ impl<'a, N: ArrayLength<ChannelStorage>> Film<N> {
 }
 
 impl<'a, N: ArrayLength<ChannelStorage> + ArrayLength<ChannelTileStorage>> Film<N> {
-    pub fn render_frame_into<I, S, F>(
+    pub fn render_frame_into<I, F>(
         &'a mut self,
-        world: &World<S>,
+        world: &World,
         camera: CameraHandle,
         integrator: &I,
         filter: &F,
@@ -401,7 +394,6 @@ impl<'a, N: ArrayLength<ChannelStorage> + ArrayLength<ChannelTileStorage>> Film<
     ) where
         F: Filter + Copy + Send,
         I: Integrator,
-        S: IsSpectrum,
     {
         let camera = world.cameras.get(camera);
         let mut tiles = Vec::new();
@@ -442,7 +434,16 @@ impl<'a, N: ArrayLength<ChannelStorage> + ArrayLength<ChannelTileStorage>> Film<
             let mut rng = SmallRng::seed_from_u64(tile.index as u64);
             // let mut rng = SmallRng::from_rng(thread_rng()).unwrap();
 
-            let arena = DynamicArena::<'_, NonSend>::new_bounded();
+            let ray_bump = Bump::new();
+            let mut spawned_rays = BumpVec::new_in(&ray_bump);
+            let mut spawned_wrays = BumpVec::new_in(&ray_bump);
+            let isec_bump = Bump::new();
+            let mut wintersections = BumpVec::new_in(&isec_bump);
+            let sample_bump = Bump::new();
+            let mut new_samples = BumpVec::new_in(&sample_bump);
+            let hit_bump = Bump::new();
+            let mut hit_store = HitStore::from_material_store(&hit_bump, &world.materials);
+            let mut bsdf_bump = Bump::new();
 
             for x in tile.raster_bounds.min.x..tile.raster_bounds.max.x {
                 for y in tile.raster_bounds.min.y..tile.raster_bounds.max.y {
@@ -451,23 +452,85 @@ impl<'a, N: ArrayLength<ChannelStorage> + ArrayLength<ChannelTileStorage>> Film<
                     for _ in 0..samples {
                         // let raster_pixel = Vec2u::new(x, y);
                         // sampler.begin_pixel(raster_pixel);
+                        let ndcs = Wec2::from([
+                            sample_uv(x, y, tile.screen_to_ndc_size, &fis, &mut rng),
+                            sample_uv(x, y, tile.screen_to_ndc_size, &fis, &mut rng),
+                            sample_uv(x, y, tile.screen_to_ndc_size, &fis, &mut rng),
+                            sample_uv(x, y, tile.screen_to_ndc_size, &fis, &mut rng),
+                        ]);
 
-                        let uv_samp = Vec2::new(rng.gen::<f32>(), rng.gen::<f32>());
-                        let fis_samp = Vec2::new(fis.sample(uv_samp.x), fis.sample(uv_samp.y));
+                        let times = f32x4::new(
+                            rng.gen_range(time_range.start, time_range.end),
+                            rng.gen_range(time_range.start, time_range.end),
+                            rng.gen_range(time_range.start, time_range.end),
+                            rng.gen_range(time_range.start, time_range.end),
+                        );
 
-                        let screen_coord = Vec2::new(x as f32 + 0.5, y as f32 + 0.5) + fis_samp;
+                        let rays = camera.get_rays(tile_coord, ndcs, times, &mut rng);
 
-                        let ndc = tile.screen_to_ndc_size * screen_coord;
-
-                        let time = rng.gen_range(time_range.start, time_range.end);
-
-                        let ray = camera.get_ray(ndc, time, &mut rng);
-                        let (spect, first_intersection) =
-                            integrator.integrate::<S>(world, ray, time, &mut rng, &arena);
-
-                        tile.add_sample(tile_coord, spect.into(), first_intersection);
+                        spawned_wrays.push(rays);
                     }
                 }
+            }
+
+            for depth in 0.. {
+                bsdf_bump.reset();
+
+                if spawned_wrays.len() <= 0 {
+                    break;
+                }
+
+                for wray in spawned_wrays.drain(..) {
+                    world.hitables.add_hits(
+                        wray,
+                        f32x4::from(0.001)..f32x4::from(500.0),
+                        &mut hit_store,
+                    );
+                }
+
+                hit_store.prepare_wintersections(&mut wintersections);
+
+                for (mat_id, wisec) in wintersections.drain(..) {
+                    integrator.integrate(
+                        world,
+                        &mut rng,
+                        depth,
+                        mat_id,
+                        wisec,
+                        &bsdf_bump,
+                        &mut spawned_rays,
+                        &mut new_samples,
+                    );
+                }
+
+                for (tile_coord, sample, first_intersection) in new_samples.drain(..) {
+                    tile.add_sample(
+                        tile_coord,
+                        sample.into(),
+                        if first_intersection > 0.0 {
+                            true
+                        } else {
+                            false
+                        },
+                    );
+                }
+
+                while spawned_rays.len() % 4 != 0 {
+                    spawned_rays.push(Ray::new(Vec3::zero(), Vec3::zero(), 0.0, Vec2u::zero()));
+                }
+                for rays in spawned_rays[0..].windows(4) {
+                    // Safe because we just ensured that it has the correct length
+                    spawned_wrays.push(WRay::from(unsafe {
+                        [
+                            *rays.get_unchecked(0),
+                            *rays.get_unchecked(1),
+                            *rays.get_unchecked(2),
+                            *rays.get_unchecked(3),
+                        ]
+                    }));
+                }
+                spawned_rays.clear();
+                println!("{}", depth);
             }
         });
     }
@@ -534,4 +597,22 @@ impl<'a, N: ArrayLength<ChannelStorage> + ArrayLength<ChannelTileStorage>> Film<
                 .unwrap();
         }
     }
+}
+
+#[inline]
+fn sample_uv(
+    x: usize,
+    y: usize,
+    screen_to_ndc_size: Vec2,
+    fis: &FilterImportanceSampler,
+    rng: &mut SmallRng,
+) -> Vec2 {
+    let uv_samp = Vec2::new(rng.gen::<f32>(), rng.gen::<f32>());
+    let fis_samp = Vec2::new(fis.sample(uv_samp.x), fis.sample(uv_samp.y));
+
+    let screen_coord = Vec2::new(x as f32 + 0.5, y as f32 + 0.5) + fis_samp;
+
+    let ndc = screen_to_ndc_size * screen_coord;
+
+    ndc
 }

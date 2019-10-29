@@ -21,8 +21,10 @@ rand = { version = "0.7", features = ["small_rng"] }
 rayon = "1.2"
 minterpolate = { version = "0.4", optional = true }
 splines = { version = "2.0", optional = true }
-sdfu = { path = "../sdfu", features = ["vek"] }
-# sdfu = { version = "0.1", features = ["vek"] }
+# sdfu = { path = "../sdfu", features = ["vek"] }
+sdfu = { version = "0.1", features = ["vek"] }
 num_cpus = "1.10"
-dynamic-arena = "0.1"
 generic-array = "0.13"
+bumpalo = { version = "2.6", features = ["collections"] }
+wide = "0.2"
+widehard = { path = "../widehard" }

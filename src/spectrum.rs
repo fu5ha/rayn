@@ -1,102 +1,110 @@
-use vek::Clamp;
-
-use crate::math::Vec3;
-use std::fmt::Debug;
+use crate::math::{f32x4, Vec3, Wec3};
 use std::iter::*;
 use std::ops::*;
 
-pub trait IsSpectrum:
-    Add<Self, Output = Self>
-    + AddAssign<Self>
-    + Sub<Self, Output = Self>
-    + SubAssign<Self>
-    + Mul<Self, Output = Self>
-    + MulAssign<Self>
-    + Mul<f32, Output = Self>
-    + Div<f32, Output = Self>
-    + DivAssign<f32>
-    + Sum
-    + PartialEq
-    + Sized
-    + Clone
-    + Copy
-    + Debug
-    + Into<Rgb>
-    + From<Rgb>
-    + Send
-    + Sync
-{
-    fn zero() -> Self;
-    fn one() -> Self;
-    fn is_black(&self) -> bool;
-    fn is_nan(&self) -> bool;
-    fn max_channel(&self) -> f32;
+macro_rules! srgbs {
+    ($($n:ident => $vt:ident, $tt:ident),+) => {
+        $(#[derive(Clone, Copy, Debug)]
+        pub struct $n(pub $vt);
+
+        impl From<$vt> for $n {
+            fn from(v: $vt) -> Self {
+                $n(v)
+            }
+        }
+
+        impl Deref for $n {
+            type Target = $vt;
+            fn deref(&self) -> &Self::Target {
+                &self.0
+            }
+        }
+
+        impl $n {
+            pub fn new(r: $tt, g: $tt, b: $tt) -> Self {
+                $n($vt::new(r, g, b))
+            }
+
+            #[allow(dead_code)]
+            pub fn gamma_corrected(&self, gamma: $tt) -> Self {
+                $n(self.0.map(|x| x.powf($tt::from(1.0) / gamma)))
+            }
+
+            #[allow(dead_code)]
+            pub fn saturated(&self) -> Self {
+                $n(
+                    self.0
+                        .map(|x| x.min($tt::from(0.0)).min($tt::from(1.0))),
+                )
+            }
+
+            pub fn zero() -> Self {
+                $n($vt::zero())
+            }
+
+            pub fn one() -> Self {
+                $n($vt::one())
+            }
+
+            pub fn max_channel(&self) -> $tt {
+                self.0.component_max()
+            }
+        }
+
+        impl Sum for $n {
+            fn sum<I: Iterator<Item = Self>>(iter: I) -> Self {
+                iter.fold($n::zero(), |a, b| a + b)
+            }
+        })+
+    };
 }
 
-type VekRgb = vek::vec::Rgb<f32>;
+srgbs!(WSrgb => Wec3, f32x4, Srgb => Vec3, f32);
 
-#[derive(Clone, Copy, Debug, PartialEq)]
-pub struct Rgb(pub VekRgb);
-
-impl From<Vec3> for Rgb {
-    fn from(v: Vec3) -> Self {
-        Rgb(VekRgb::from(v))
-    }
-}
-
-impl Rgb {
-    pub fn new(r: f32, g: f32, b: f32) -> Self {
-        Rgb(VekRgb::new(r, g, b))
+impl Srgb {
+    pub fn is_black(&self) -> bool {
+        self.0.component_max() < 0.0001
     }
 
-    #[allow(dead_code)]
-    pub fn gamma_corrected(&self, gamma: f32) -> Self {
-        Rgb(self.0.map(|x| x.powf(1.0 / gamma)))
-    }
-
-    #[allow(dead_code)]
-    pub fn saturated(&self) -> Rgb {
-        Rgb(self.0.map(|x| Clamp::clamped01(x)))
-    }
-}
-
-impl Deref for Rgb {
-    type Target = VekRgb;
-    fn deref(&self) -> &VekRgb {
-        &self.0
-    }
-}
-
-impl IsSpectrum for Rgb {
-    fn zero() -> Self {
-        Rgb(VekRgb::zero())
-    }
-
-    fn one() -> Self {
-        Rgb(VekRgb::one())
-    }
-
-    fn is_black(&self) -> bool {
-        self.max_channel() < 0.0001
-    }
-
-    fn is_nan(&self) -> bool {
-        self.r.is_nan() || self.g.is_nan() || self.b.is_nan()
-    }
-
-    fn max_channel(&self) -> f32 {
-        self.0.reduce_partial_max()
+    pub fn is_nan(&self) -> bool {
+        std::iter::once(self.x.classify())
+            .chain(std::iter::once(self.y.classify()))
+            .chain(std::iter::once(self.z.classify()))
+            .fold(false, |acc, class| {
+                acc || if let std::num::FpCategory::Nan = class {
+                    true
+                } else {
+                    false
+                }
+            })
     }
 }
 
-impl Sum for Rgb {
-    fn sum<I: Iterator<Item = Self>>(iter: I) -> Self {
-        iter.fold(Rgb::zero(), |a, b| a + b)
+impl WSrgb {
+    pub fn merge(mask: f32x4, a: Self, b: Self) -> Self {
+        Self(Wec3::merge(mask, a.0, b.0))
+    }
+
+    pub fn splat(srgb: Srgb) -> Self {
+        Self(Wec3::splat(srgb.0))
+    }
+}
+
+impl From<[Srgb; 4]> for WSrgb {
+    fn from(srgbs: [Srgb; 4]) -> Self {
+        WSrgb(Wec3::from([srgbs[0].0, srgbs[1].0, srgbs[2].0, srgbs[3].0]))
+    }
+}
+
+impl Into<[Srgb; 4]> for WSrgb {
+    fn into(self) -> [Srgb; 4] {
+        let vecs: [Vec3; 4] = self.0.into();
+        [Srgb(vecs[0]), Srgb(vecs[1]), Srgb(vecs[2]), Srgb(vecs[3])]
     }
 }
 
 macro_rules! impl_wrapper_ops {
-    ($wrapper_t:ident) => {
+    ($wrapper_t:ident => $tt:ident) => {
         impl ::std::ops::Add for $wrapper_t {
             type Output = $wrapper_t;
 
@@ -125,30 +133,30 @@ macro_rules! impl_wrapper_ops {
             }
         }
 
-        impl ::std::ops::Div<f32> for $wrapper_t {
+        impl ::std::ops::Div<$tt> for $wrapper_t {
             type Output = $wrapper_t;
 
-            fn div(self, other: f32) -> $wrapper_t {
+            fn div(self, other: $tt) -> $wrapper_t {
                 $wrapper_t(self.0 / other)
             }
         }
 
-        impl std::ops::DivAssign<f32> for $wrapper_t {
-            fn div_assign(&mut self, rhs: f32) {
+        impl std::ops::DivAssign<$tt> for $wrapper_t {
+            fn div_assign(&mut self, rhs: $tt) {
                 *self = *self / rhs
             }
         }
 
-        impl ::std::ops::Mul<f32> for $wrapper_t {
+        impl ::std::ops::Mul<$tt> for $wrapper_t {
             type Output = $wrapper_t;
 
-            fn mul(self, other: f32) -> $wrapper_t {
+            fn mul(self, other: $tt) -> $wrapper_t {
                 $wrapper_t(self.0 * other)
             }
         }
 
-        impl std::ops::MulAssign<f32> for $wrapper_t {
-            fn mul_assign(&mut self, rhs: f32) {
+        impl std::ops::MulAssign<$tt> for $wrapper_t {
+            fn mul_assign(&mut self, rhs: $tt) {
                 *self = *self * rhs
             }
         }
@@ -169,4 +177,5 @@ macro_rules! impl_wrapper_ops {
     };
 }
 
-impl_wrapper_ops!(Rgb);
+impl_wrapper_ops!(Srgb => f32);
+impl_wrapper_ops!(WSrgb => f32x4);
