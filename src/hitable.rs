@@ -49,7 +49,7 @@ pub struct WIntersection {
     pub offset_by: f32x4,
     pub normal: Wec3,
     pub basis: Wat3,
-    pub valid: f32x4,
+    pub valid: [bool; 4],
 }
 
 impl From<[Intersection; 4]> for WIntersection {
@@ -86,12 +86,12 @@ impl From<[Intersection; 4]> for WIntersection {
             intersections[3].t,
         );
 
-        let valid = f32x4::new(
-            if intersections[0].valid { 1.0 } else { 0.0 },
-            if intersections[1].valid { 1.0 } else { 0.0 },
-            if intersections[2].valid { 1.0 } else { 0.0 },
-            if intersections[3].valid { 1.0 } else { 0.0 },
-        );
+        let valid = [
+            intersections[0].valid,
+            intersections[1].valid,
+            intersections[2].valid,
+            intersections[3].valid,
+        ];
 
         Self {
             ray,
@@ -135,7 +135,7 @@ impl<'bump> HitStore<'bump> {
     }
 
     pub fn add_hit(&mut self, mat_id: MaterialHandle, isec: Intersection) {
-        self.hits[mat_id.0].push(isec)
+        self.hits[mat_id.0].push(isec);
     }
 
     pub fn prepare_wintersections(
@@ -156,7 +156,7 @@ impl<'bump> HitStore<'bump> {
         wintersections.reserve(total_isecs / 4);
 
         for (mat_id, isecs) in self.hits.iter_mut().enumerate() {
-            for isecs in isecs[0..].windows(4) {
+            for isecs in isecs[0..].chunks(4) {
                 wintersections.push((
                     MaterialHandle(mat_id),
                     // Safe because we just assured that every window will have exactly
@@ -171,7 +171,11 @@ impl<'bump> HitStore<'bump> {
                     }),
                 ));
             }
+        }
+    }
 
+    pub fn reset(&mut self) {
+        for isecs in self.hits.iter_mut() {
             isecs.clear();
         }
     }
@@ -237,7 +241,6 @@ impl HitableStore {
             .zip(rays.iter())
             .zip(dists.iter())
         {
-            // println!("{}", t);
             if *id < std::usize::MAX {
                 let (mat, isec) = self[*id].intersection_at(*ray, *t, *point);
                 hit_store.add_hit(mat, isec);

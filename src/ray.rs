@@ -10,13 +10,12 @@ macro_rules! rays {
             pub dir: $t,
             pub radiance: $st,
             pub throughput: $st,
-            pub alpha: $tt,
             pub tile_coord: $tc,
         }
 
         impl $n {
             pub fn new(origin: $t, dir: $t, time: $tt, tile_coord: $tc) -> Self {
-                Self { time, origin, dir, radiance: $st::zero(), throughput: $st::one(), alpha: $tt::from(0.0), tile_coord, }
+                Self { time, origin, dir, radiance: $st::zero(), throughput: $st::one(), tile_coord, }
             }
 
             pub fn point_at(&self, t: $tt) -> $t {
@@ -51,7 +50,6 @@ impl From<[Ray; 4]> for WRay {
                 rays[2].throughput,
                 rays[3].throughput,
             ]),
-            alpha: f32x4::new(rays[0].alpha, rays[1].alpha, rays[2].alpha, rays[3].alpha),
             tile_coord: [
                 rays[0].tile_coord,
                 rays[1].tile_coord,
@@ -69,7 +67,6 @@ impl Into<[Ray; 4]> for WRay {
         let dirs: [Vec3; 4] = self.dir.into();
         let throughputs: [Srgb; 4] = self.throughput.into();
         let radiances: [Srgb; 4] = self.radiance.into();
-        let alphas = self.alpha.as_ref();
         [
             Ray {
                 time: times[0],
@@ -77,7 +74,6 @@ impl Into<[Ray; 4]> for WRay {
                 dir: dirs[0],
                 radiance: radiances[0],
                 throughput: throughputs[0],
-                alpha: alphas[0],
                 tile_coord: self.tile_coord[0],
             },
             Ray {
@@ -86,7 +82,6 @@ impl Into<[Ray; 4]> for WRay {
                 dir: dirs[1],
                 radiance: radiances[1],
                 throughput: throughputs[1],
-                alpha: alphas[1],
                 tile_coord: self.tile_coord[1],
             },
             Ray {
@@ -95,7 +90,6 @@ impl Into<[Ray; 4]> for WRay {
                 dir: dirs[2],
                 radiance: radiances[2],
                 throughput: throughputs[2],
-                alpha: alphas[2],
                 tile_coord: self.tile_coord[2],
             },
             Ray {
@@ -104,7 +98,6 @@ impl Into<[Ray; 4]> for WRay {
                 dir: dirs[3],
                 radiance: radiances[3],
                 throughput: throughputs[3],
-                alpha: alphas[3],
                 tile_coord: self.tile_coord[3],
             },
         ]

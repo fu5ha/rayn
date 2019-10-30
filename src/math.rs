@@ -46,20 +46,10 @@ pub trait RandomSample2d {
 
 impl RandomSample2d for Wec2 {
     fn rand_in_unit_disk(rng: &mut SmallRng) -> Self {
-        let rho = [
-            rng.gen::<f32>().sqrt(),
-            rng.gen::<f32>().sqrt(),
-            rng.gen::<f32>().sqrt(),
-            rng.gen::<f32>().sqrt(),
-        ];
-        let rho = f32x4::from(rho);
-        let theta = [
-            rng.gen_range(0.0, std::f32::consts::PI * 2.0),
-            rng.gen_range(0.0, std::f32::consts::PI * 2.0),
-            rng.gen_range(0.0, std::f32::consts::PI * 2.0),
-            rng.gen_range(0.0, std::f32::consts::PI * 2.0),
-        ];
-        let theta = f32x4::from(theta);
+        let rho = rng.gen::<[f32; 4]>();
+        let rho = f32x4::from(rho).sqrt();
+        let theta = rng.gen::<[f32; 4]>();
+        let theta = f32x4::from(theta) * f32x4::from(2f32 * PI);
         Wec2::new(rho * theta.cos(), rho * theta.sin())
     }
 }
@@ -72,20 +62,10 @@ pub trait RandomSample3d<T> {
 
 impl RandomSample3d<f32x4> for Wec3 {
     fn rand_in_unit_sphere(rng: &mut SmallRng) -> Self {
-        let theta = [
-            rng.gen_range(0f32, 2f32 * PI),
-            rng.gen_range(0f32, 2f32 * PI),
-            rng.gen_range(0f32, 2f32 * PI),
-            rng.gen_range(0f32, 2f32 * PI),
-        ];
-        let theta = f32x4::from(theta);
-        let phi = [
-            rng.gen_range(-1f32, 1f32),
-            rng.gen_range(-1f32, 1f32),
-            rng.gen_range(-1f32, 1f32),
-            rng.gen_range(-1f32, 1f32),
-        ];
-        let phi = f32x4::from(phi);
+        let theta = rng.gen::<[f32; 4]>();
+        let theta = f32x4::from(theta) * f32x4::from(2f32 * PI);
+        let phi = rng.gen::<[f32; 4]>();
+        let phi = f32x4::from(phi) * f32x4::from(2.0) - f32x4::from(1.0);
         let ophisq = (f32x4::from(1.0) - phi * phi).sqrt();
         Wec3::new(ophisq * theta.cos(), ophisq * theta.sin(), phi)
     }

@@ -34,7 +34,7 @@ macro_rules! srgbs {
             pub fn saturated(&self) -> Self {
                 $n(
                     self.0
-                        .map(|x| x.min($tt::from(0.0)).min($tt::from(1.0))),
+                        .map(|x| x.max($tt::from(0.0)).min($tt::from(1.0))),
                 )
             }
 

@@ -1,7 +1,7 @@
 use rand::rngs::SmallRng;
 
 use crate::animation::WSequenced;
-use crate::math::{RandomSample2d, Transform, Vec2, Vec2u, Vec3, Wec2, Wec3};
+use crate::math::{RandomSample2d, Vec2, Vec2u, Vec3, Wec2, Wec3};
 use crate::ray::WRay;
 
 use wide::f32x4;

@@ -20,7 +20,7 @@ use film::{ChannelKind, Film};
 use filter::{BlackmanHarrisFilter, BoxFilter};
 use hitable::HitableStore;
 use integrator::PathTracingIntegrator;
-use material::{Dielectric, MaterialStore};
+use material::{Dielectric, MaterialStore, Sky};
 use math::{Extent2u, Vec3, Wec3};
 use sdf::TracedSDF;
 use spectrum::{Srgb, WSrgb};
@@ -32,14 +32,16 @@ use std::time::Instant;
 use wide::f32x4;
 
 const RES: (usize, usize) = (1280, 720);
-const SAMPLES: usize = 1;
+const SAMPLES: usize = 32;
 
 fn setup() -> (CameraHandle, World) {
     let mut materials = MaterialStore::new();
     let ground = materials.add_material(Dielectric::new(
         WSrgb::splat(Srgb::new(0.25, 0.2, 0.35)),
-        f32x4::from(0.3),
+        f32x4::from(0.0),
     ));
+
+    let sky = materials.add_material(Sky {});
 
     let mut hitables = HitableStore::new();
     hitables.push(Box::new(Sphere::new(
@@ -47,6 +49,8 @@ fn setup() -> (CameraHandle, World) {
         200.0,
         ground,
     )));
+
+    hitables.push(Box::new(Sphere::new(Vec3::new(0.0, 0.0, 0.0), 300.0, sky)));
     // hitables.push(Box::new(TracedSDF::new(
     //     sdfu::Sphere::<f32>::new(0.45)
     //         .subtract(sdfu::Box::new(Vec3::new(0.25, 0.25, 1.5)))
@@ -75,8 +79,8 @@ fn setup() -> (CameraHandle, World) {
     //     checkerboard,
     // )));
     hitables.push(Box::new(Sphere::new(
-        Vec3::new(-0.2, -0.05, -1.0),
-        0.5,
+        Vec3::new(0.0, 0.0, -1.0),
+        1.0,
         ground,
     )));
     // hitables.push(Box::new(Sphere::new(
@@ -167,7 +171,7 @@ fn main() {
 
     let filter = BlackmanHarrisFilter::new(2.0);
     // let filter = BoxFilter::default();
-    let integrator = PathTracingIntegrator { max_bounces: 2 };
+    let integrator = PathTracingIntegrator { max_bounces: 3 };
 
     for frame in frame_range {
         let start = Instant::now();
@@ -180,7 +184,7 @@ fn main() {
             camera,
             &integrator,
             &filter,
-            Extent2u::new(32, 32),
+            Extent2u::new(16, 16),
             frame_start..frame_end,
             SAMPLES,
         );

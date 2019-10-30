@@ -39,7 +39,7 @@ impl<TR: WSequenced<Wec3> + Sequenced<Vec3>> Hitable for Sphere<TR> {
 
         let mask = t1.cmp_le(t2);
 
-        let t = f32x4::merge(mask, t1, t2);
+        let t = f32x4::merge(mask, t2, t1);
         let min_mask = t.cmp_gt(t_range.start);
         let max_mask = t.cmp_le(t_range.end);
 
@@ -49,7 +49,8 @@ impl<TR: WSequenced<Wec3> + Sequenced<Vec3>> Hitable for Sphere<TR> {
     }
 
     fn intersection_at(&self, ray: Ray, t: f32, point: Vec3) -> (MaterialHandle, Intersection) {
-        let normal = (point - Sequenced::sample_at(&self.transform_seq, ray.time)).normalized();
+        let origin = Sequenced::sample_at(&self.transform_seq, ray.time);
+        let normal = (point - origin).normalized();
         (self.material, Intersection::new(ray, t, point, 0.0, normal))
     }
 }

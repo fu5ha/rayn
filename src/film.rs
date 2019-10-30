@@ -8,11 +8,11 @@ use wide::f32x4;
 
 use crate::camera::CameraHandle;
 use crate::filter::{Filter, FilterImportanceSampler};
-use crate::hitable::{HitStore, Intersection};
+use crate::hitable::HitStore;
 use crate::integrator::Integrator;
-use crate::math::{Aabru, Extent2u, Vec2, Vec2u, Vec3, Wec2, Wec3};
+use crate::math::{Aabru, Extent2u, Vec2, Vec2u, Vec3, Wec2};
 use crate::ray::{Ray, WRay};
-use crate::spectrum::{Srgb, WSrgb};
+use crate::spectrum::Srgb;
 use crate::world::World;
 
 use std::collections::HashMap;
@@ -34,6 +34,11 @@ macro_rules! declare_channels {
             $($name,)+
         }
 
+        #[derive(Debug)]
+        pub enum ChannelSample {
+            $($name($storage),)+
+        }
+
         pub enum ChannelTileStorage {
             $($name(Vec<($storage, f32)>),)+
         }
@@ -43,6 +48,19 @@ macro_rules! declare_channels {
                 use ChannelKind::*;
                 match kind {
                     $($name => Self::$name(vec![($initialize, 0.0); res.w * res.h]),)+
+                }
+            }
+
+            fn add_sample(&mut self, idx: usize, sample: &ChannelSample) {
+                println!("{:?}", sample);
+                match (self, sample) {
+                    $((ChannelTileStorage::$name(ref mut buf), ChannelSample::$name(sample)) => {
+                        buf[idx].0 += *sample;
+                        buf[idx].1 += 1.0;
+                    },)+
+                    $((ChannelTileStorage::$name(ref mut buf), _) => {
+                        buf[idx].1 += 1.0;
+                    },)+
                 }
             }
         }
@@ -73,8 +91,8 @@ macro_rules! declare_channels {
                             for y in 0..extent.h {
                                 let tile_idx = x + y * extent.w;
                                 let this_idx = (tile_bounds.min.x + x) + (tile_bounds.min.y + y) * full_res.w;
-                                let tile = tile_buf[tile_idx];
-                                this_buf[this_idx] = tile.0 / tile.1;
+                                let (tile_col_sum, tile_weight_sum) = tile_buf[tile_idx];
+                                this_buf[this_idx] = tile_col_sum / tile_weight_sum;
                             }
                         }
                         Ok(())
@@ -98,11 +116,11 @@ declare_channels! {
     Background => {
         storage: Srgb,
         init: Srgb::zero(),
+    },
+    WorldNormal => {
+        storage: Vec3,
+        init: Vec3::zero(),
     }
-    // WorldNormal => {
-    //     storage: Vec3,
-    //     init: Vec3::zero(),
-    // }
 }
 
 macro_rules! channel_storage_index {
@@ -150,34 +168,10 @@ impl<N: ArrayLength<ChannelTileStorage>> Tile<N> {
         }
     }
 
-    pub fn add_sample(&mut self, tile_coord: Vec2u, spect: Srgb, first_intersection: bool) {
-        // println!("{:#?}", spect);
+    pub fn add_sample(&mut self, tile_coord: Vec2u, sample: ChannelSample) {
         let idx = tile_coord.x + tile_coord.y * self.raster_extent.w;
-
         for channel in self.channels.iter_mut() {
-            match channel {
-                ChannelTileStorage::Color(ref mut buf) => {
-                    let (col_sum, weight_sum) = &mut buf[idx];
-                    if first_intersection {
-                        *col_sum += spect;
-                    }
-                    *weight_sum += 1.0;
-                }
-                ChannelTileStorage::Background(ref mut buf) => {
-                    let (col_sum, weight_sum) = &mut buf[idx];
-                    if !first_intersection {
-                        *col_sum += spect;
-                    }
-                    *weight_sum += 1.0;
-                }
-                ChannelTileStorage::Alpha(ref mut buf) => {
-                    let (col_sum, weight_sum) = &mut buf[idx];
-                    if first_intersection {
-                        *col_sum += 1.0;
-                    }
-                    *weight_sum += 1.0;
-                }
-            }
+            channel.add_sample(idx, &sample);
         }
     }
 }
@@ -268,7 +262,7 @@ impl<'a, N: ArrayLength<ChannelStorage>> Film<N> {
                                 let i = x as usize + (self.res.h - 1 - y as usize) * self.res.w;
                                 let col = color_buf[i];
                                 let bg = bg_buf[i];
-                                let rgb = Srgb::from(col + bg).saturated().gamma_corrected(2.2);
+                                let rgb = (col + bg).saturated().gamma_corrected(2.2);
                                 *pixel = image::Rgb([
                                     (rgb.x * 255.0).min(255.0).max(0.0) as u8,
                                     (rgb.y * 255.0).min(255.0).max(0.0) as u8,
@@ -332,28 +326,28 @@ impl<'a, N: ArrayLength<ChannelStorage>> Film<N> {
                     println!("Saving to {}...", filename.display());
                     img.save(filename).unwrap();
                 }
-                // ChannelKind::WorldNormal => {
-                //     let idx = *self.channel_indices.get(&ChannelKind::WorldNormal).ok_or(
-                //         String::from("Attempted to write WorldNormal channel but it didn't exist"),
-                //     )?;
-                //     let buf = channel_storage_index!(channels, WorldNormal, idx);
-                //     let mut img = image::RgbImage::new(self.res.w as u32, self.res.h as u32);
-                //     for (x, y, pixel) in img.enumerate_pixels_mut() {
-                //         let idx = x as usize + (self.res.h - 1 - y as usize) * self.res.w;
-                //         let vec = buf[idx];
-                //         let rgb = Srgb::from(vec * 0.5 + Vec3::new(0.5, 0.5, 0.5));
-                //         *pixel = image::Rgb([
-                //             (rgb.x * 255.0).min(255.0).max(0.0) as u8,
-                //             (rgb.y * 255.0).min(255.0).max(0.0) as u8,
-                //             (rgb.z * 255.0).min(255.0).max(0.0) as u8,
-                //         ]);
-                //     }
-                //     let filename = output_folder
-                //         .as_ref()
-                //         .join(format!("{}_normal.png", base_name.clone()));
-                //     println!("Saving to {}...", filename.display());
-                //     img.save(filename).unwrap();
-                // }
+                ChannelKind::WorldNormal => {
+                    let idx = *self.channel_indices.get(&ChannelKind::WorldNormal).ok_or(
+                        String::from("Attempted to write WorldNormal channel but it didn't exist"),
+                    )?;
+                    let buf = channel_storage_index!(channels, WorldNormal, idx);
+                    let mut img = image::RgbImage::new(self.res.w as u32, self.res.h as u32);
+                    for (x, y, pixel) in img.enumerate_pixels_mut() {
+                        let idx = x as usize + (self.res.h - 1 - y as usize) * self.res.w;
+                        let vec = buf[idx];
+                        let rgb = Srgb::from(vec * 0.5 + Vec3::new(0.5, 0.5, 0.5));
+                        *pixel = image::Rgb([
+                            (rgb.x * 255.0).min(255.0).max(0.0) as u8,
+                            (rgb.y * 255.0).min(255.0).max(0.0) as u8,
+                            (rgb.z * 255.0).min(255.0).max(0.0) as u8,
+                        ]);
+                    }
+                    let filename = output_folder
+                        .as_ref()
+                        .join(format!("{}_normal.png", base_name.clone()));
+                    println!("Saving to {}...", filename.display());
+                    img.save(filename).unwrap();
+                }
                 ChannelKind::Alpha => {
                     let idx =
                         *self
@@ -480,6 +474,8 @@ impl<'a, N: ArrayLength<ChannelStorage> + ArrayLength<ChannelTileStorage>> Film<
                     break;
                 }
 
+                hit_store.reset();
+
                 for wray in spawned_wrays.drain(..) {
                     world.hitables.add_hits(
                         wray,
@@ -503,22 +499,14 @@ impl<'a, N: ArrayLength<ChannelStorage> + ArrayLength<ChannelTileStorage>> Film<
                     );
                 }
 
-                for (tile_coord, sample, first_intersection) in new_samples.drain(..) {
-                    tile.add_sample(
-                        tile_coord,
-                        sample.into(),
-                        if first_intersection > 0.0 {
-                            true
-                        } else {
-                            false
-                        },
-                    );
+                for (tile_coord, sample) in new_samples.drain(..) {
+                    tile.add_sample(tile_coord, sample);
                 }
 
                 while spawned_rays.len() % 4 != 0 {
                     spawned_rays.push(Ray::new(Vec3::zero(), Vec3::zero(), 0.0, Vec2u::zero()));
                 }
-                for rays in spawned_rays[0..].windows(4) {
+                for rays in spawned_rays[0..].chunks(4) {
                     // Safe because we just ensured that it has the correct length
                     spawned_wrays.push(WRay::from(unsafe {
                         [
@@ -530,7 +518,6 @@ impl<'a, N: ArrayLength<ChannelStorage> + ArrayLength<ChannelTileStorage>> Film<
                     }));
                 }
                 spawned_rays.clear();
-                println!("{}", depth);
             }
         });
     }

@@ -3,10 +3,11 @@ use bumpalo::Bump;
 use rand::rngs::SmallRng;
 use rand::Rng;
 
-use crate::hitable::{HitStore, Intersection, WIntersection};
-use crate::material::{Material, MaterialHandle, BSDF};
+use crate::film::ChannelSample;
+use crate::hitable::WIntersection;
+use crate::material::MaterialHandle;
 use crate::math::{Vec2u, Vec3};
-use crate::ray::{Ray, WRay};
+use crate::ray::Ray;
 use crate::spectrum::Srgb;
 use crate::world::World;
 
@@ -22,7 +23,7 @@ pub trait Integrator: Send + Sync {
         intersection: WIntersection,
         bump: &Bump,
         spawned_rays: &mut BumpVec<Ray>,
-        output_samples: &mut BumpVec<(Vec2u, Srgb, f32)>,
+        output_samples: &mut BumpVec<(Vec2u, ChannelSample)>,
     );
 }
 
@@ -41,12 +42,8 @@ impl Integrator for PathTracingIntegrator {
         mut intersection: WIntersection,
         bump: &Bump,
         spawned_rays: &mut BumpVec<Ray>,
-        output_samples: &mut BumpVec<(Vec2u, Srgb, f32)>,
+        output_samples: &mut BumpVec<(Vec2u, ChannelSample)>,
     ) {
-        if depth == 0 {
-            intersection.ray.alpha = f32x4::from(1.0);
-        }
-
         let wi = intersection.ray.dir;
         let material = world.materials.get(material);
 
@@ -56,40 +53,66 @@ impl Integrator for PathTracingIntegrator {
 
         let scattering_event = bsdf.scatter(wi, &intersection, rng);
 
-        let ndl = scattering_event.wi.dot(intersection.normal).abs();
+        if let Some(se) = scattering_event {
+            let ndl = se.wi.dot(intersection.normal).abs();
 
-        let mut new_throughput =
-            intersection.ray.throughput * scattering_event.f / scattering_event.pdf * ndl;
+            let mut new_throughput = intersection.ray.throughput * se.f / se.pdf * ndl;
 
-        let roulette_factor = if depth > 2 {
-            let roulette_factor = (f32x4::from(1.0) - intersection.ray.throughput.max_channel())
+            let roulette_factor = if depth > 2 {
+                let roulette_factor = (f32x4::from(1.0)
+                    - intersection.ray.throughput.max_channel())
                 .max(f32x4::from(0.05));
 
-            new_throughput /= f32x4::from(1.0) - roulette_factor;
+                new_throughput /= f32x4::from(1.0) - roulette_factor;
 
-            roulette_factor
+                roulette_factor
+            } else {
+                f32x4::from(0.0)
+            };
+
+            let mut new_rays: [Ray; 4] = intersection.create_rays(se.wi).into();
+            let throughputs: [Srgb; 4] = new_throughput.into();
+
+            if depth == 0 {
+                let normals: [Vec3; 4] = intersection.normal.into();
+                for (ray, normal) in new_rays.iter().zip(normals.iter()) {
+                    output_samples.push((ray.tile_coord, ChannelSample::Alpha(1.0)));
+                    output_samples.push((ray.tile_coord, ChannelSample::WorldNormal(*normal)));
+                }
+            }
+
+            for (((ray, new_throughput), roulette_factor), valid) in new_rays
+                .iter_mut()
+                .zip(throughputs.into_iter())
+                .zip(roulette_factor.as_ref().iter())
+                .zip(intersection.valid.iter())
+            {
+                if *valid {
+                    if depth >= self.max_bounces || rng.gen::<f32>() < *roulette_factor {
+                        output_samples.push((ray.tile_coord, ChannelSample::Color(ray.radiance)));
+                    } else {
+                        if !new_throughput.is_nan() {
+                            ray.throughput = *new_throughput;
+                        }
+
+                        spawned_rays.push(*ray);
+                    }
+                }
+            }
         } else {
-            f32x4::from(0.0)
-        };
+            let final_rays: [Ray; 4] = intersection.ray.into();
 
-        let mut new_rays: [Ray; 4] = intersection.create_rays(scattering_event.wi).into();
-        let throughputs: [Srgb; 4] = new_throughput.into();
+            for (ray, valid) in final_rays.iter().zip(intersection.valid.iter()) {
+                if *valid {
+                    let sample = if depth == 0 {
+                        ChannelSample::Background(ray.radiance)
+                    } else {
+                        ChannelSample::Color(ray.radiance)
+                    };
 
-        for ((ray, new_throughput), roulette_factor) in new_rays
-            .iter_mut()
-            .zip(throughputs.into_iter())
-            .zip(roulette_factor.as_ref().iter())
-        {
-            if depth >= self.max_bounces || rng.gen::<f32>() < *roulette_factor {
-                output_samples.push((ray.tile_coord, ray.radiance, ray.alpha));
-                break;
+                    output_samples.push((ray.tile_coord, sample));
+                }
             }
-
-            if !new_throughput.is_nan() {
-                ray.throughput = *new_throughput;
-            }
-
-            spawned_rays.push(*ray);
         }
     }
 }

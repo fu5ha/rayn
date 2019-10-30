@@ -19,7 +19,7 @@ pub trait BSDF {
         wo: Wec3,
         intersection: &WIntersection,
         rng: &mut SmallRng,
-    ) -> WScatteringEvent;
+    ) -> Option<WScatteringEvent>;
 
     fn le(&self, _wo: Wec3, _intersection: &WIntersection) -> WSrgb {
         WSrgb::zero()
@@ -118,7 +118,7 @@ impl BSDF for DielectricBSDF {
         wo: Wec3,
         intersection: &WIntersection,
         rng: &mut SmallRng,
-    ) -> WScatteringEvent {
+    ) -> Option<WScatteringEvent> {
         let norm = intersection.normal;
         let cos = norm.dot(-wo).abs();
 
@@ -148,12 +148,16 @@ impl BSDF for DielectricBSDF {
 
         let fresnel_mask = fresnel_sample.cmp_lt(fresnel);
 
-        WScatteringEvent {
-            wi: Wec3::merge(fresnel_mask, diffuse_bounce, spec_bounce),
-            f: WSrgb::merge(fresnel_mask, diffuse_f, spec_f),
-            pdf: f32x4::merge(fresnel_mask, diffuse_pdf, spec_pdf),
-            specular: f32x4::merge(fresnel_mask, f32x4::from(0.0), f32x4::from(1.0)),
-        }
+        Some(WScatteringEvent {
+            wi: spec_bounce,
+            f: spec_f,
+            pdf: spec_pdf,
+            specular: f32x4::from(1.0),
+            // wi: Wec3::merge(fresnel_mask, diffuse_bounce, spec_bounce),
+            // f: WSrgb::merge(fresnel_mask, diffuse_f, spec_f),
+            // pdf: f32x4::merge(fresnel_mask, diffuse_pdf, spec_pdf),
+            // specular: f32x4::merge(fresnel_mask, f32x4::from(0.0), f32x4::from(1.0)),
+        })
     }
 }
 
@@ -169,7 +173,7 @@ impl BSDF for MetalBSDF {
         wo: Wec3,
         intersection: &WIntersection,
         rng: &mut SmallRng,
-    ) -> WScatteringEvent {
+    ) -> Option<WScatteringEvent> {
         let sample = Wec3::cosine_weighted_in_hemisphere(rng, self.roughness);
         let reflection = wo.reflected(intersection.normal);
         let basis = reflection.get_orthonormal_basis();
@@ -177,12 +181,12 @@ impl BSDF for MetalBSDF {
         let pdf = sample.dot(Wec3::unit_z()) / f32x4::from(wide::consts::PI);
         let cos = bounce.dot(intersection.normal).abs();
         let f = f_schlick_c(cos, self.f0) / cos / f32x4::from(wide::consts::PI);
-        WScatteringEvent {
+        Some(WScatteringEvent {
             wi: bounce.normalized(),
             f,
             pdf,
             specular: f32x4::from(1.0),
-        }
+        })
     }
 }
 
@@ -257,6 +261,42 @@ impl BSDF for MetalBSDF {
 // }
 
 #[derive(Clone, Copy)]
+pub struct Sky {}
+
+impl Material for Sky {
+    fn get_bsdf_at<'bump>(
+        &self,
+        _intersection: &WIntersection,
+        bump: &'bump Bump,
+    ) -> &'bump mut dyn BSDF {
+        bump.alloc_with(|| SkyBSDF {})
+    }
+}
+
+#[derive(Clone, Copy)]
+pub struct SkyBSDF {}
+
+impl BSDF for SkyBSDF {
+    fn scatter(
+        &self,
+        _wo: Wec3,
+        _intersection: &WIntersection,
+        _rng: &mut SmallRng,
+    ) -> Option<WScatteringEvent> {
+        None
+    }
+
+    fn le(&self, wo: Wec3, _intersection: &WIntersection) -> WSrgb {
+        let dir = -wo;
+        let t = f32x4::from(0.5) * (dir.y + f32x4::from(1.0));
+
+        let top = WSrgb::one();
+        let mid = WSrgb::new(f32x4::from(0.5), f32x4::from(0.7), f32x4::from(1.0));
+        top * (f32x4::from(1.0) - t) + mid * t
+    }
+}
+
+#[derive(Clone, Copy)]
 pub struct EmissiveBSDF<I> {
     inner: I,
     emission: WSrgb,
@@ -271,7 +311,7 @@ where
         wo: Wec3,
         intersection: &WIntersection,
         rng: &mut SmallRng,
-    ) -> WScatteringEvent {
+    ) -> Option<WScatteringEvent> {
         self.inner.scatter(wo, intersection, rng)
     }
 
