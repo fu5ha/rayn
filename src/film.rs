@@ -52,15 +52,12 @@ macro_rules! declare_channels {
             }
 
             fn add_sample(&mut self, idx: usize, sample: &ChannelSample) {
-                println!("{:?}", sample);
                 match (self, sample) {
                     $((ChannelTileStorage::$name(ref mut buf), ChannelSample::$name(sample)) => {
                         buf[idx].0 += *sample;
                         buf[idx].1 += 1.0;
                     },)+
-                    $((ChannelTileStorage::$name(ref mut buf), _) => {
-                        buf[idx].1 += 1.0;
-                    },)+
+                    _ => (),
                 }
             }
         }

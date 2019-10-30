@@ -1,4 +1,4 @@
-use generic_array::typenum::U2;
+use generic_array::typenum::*;
 use sdfu::SDF;
 
 mod animation;
@@ -51,6 +51,7 @@ fn setup() -> (CameraHandle, World) {
     )));
 
     hitables.push(Box::new(Sphere::new(Vec3::new(0.0, 0.0, 0.0), 300.0, sky)));
+
     // hitables.push(Box::new(TracedSDF::new(
     //     sdfu::Sphere::<f32>::new(0.45)
     //         .subtract(sdfu::Box::new(Vec3::new(0.25, 0.25, 1.5)))
@@ -80,7 +81,7 @@ fn setup() -> (CameraHandle, World) {
     // )));
     hitables.push(Box::new(Sphere::new(
         Vec3::new(0.0, 0.0, -1.0),
-        1.0,
+        0.5,
         ground,
     )));
     // hitables.push(Box::new(Sphere::new(
@@ -159,8 +160,12 @@ fn main() {
 
     let (camera, world) = setup();
 
-    let mut film = Film::<U2>::new(
-        &[ChannelKind::Color, ChannelKind::Background],
+    let mut film = Film::<U3>::new(
+        &[
+            ChannelKind::Color,
+            ChannelKind::Background,
+            ChannelKind::WorldNormal,
+        ],
         Extent2u::new(RES.0, RES.1),
     )
     .unwrap();
@@ -201,9 +206,9 @@ fn main() {
         println!("Post processing image...");
 
         film.save_to(
-            &[ChannelKind::Color],
+            &[ChannelKind::WorldNormal, ChannelKind::Color],
             "renders",
-            format!("frame{}_blackman", frame),
+            format!("frame{}", frame),
             false,
         )
         .unwrap();
