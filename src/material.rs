@@ -149,14 +149,14 @@ impl BSDF for DielectricBSDF {
         let fresnel_mask = fresnel_sample.cmp_lt(fresnel);
 
         Some(WScatteringEvent {
-            wi: spec_bounce,
-            f: spec_f,
-            pdf: spec_pdf,
-            specular: f32x4::from(1.0),
-            // wi: Wec3::merge(fresnel_mask, diffuse_bounce, spec_bounce),
-            // f: WSrgb::merge(fresnel_mask, diffuse_f, spec_f),
-            // pdf: f32x4::merge(fresnel_mask, diffuse_pdf, spec_pdf),
-            // specular: f32x4::merge(fresnel_mask, f32x4::from(0.0), f32x4::from(1.0)),
+            // wi: spec_bounce,
+            // f: spec_f * f32x4::from(0.8),
+            // pdf: spec_pdf,
+            // specular: f32x4::from(0.0),
+            wi: Wec3::merge(fresnel_mask, diffuse_bounce, spec_bounce),
+            f: WSrgb::merge(fresnel_mask, diffuse_f, spec_f),
+            pdf: f32x4::merge(fresnel_mask, diffuse_pdf, spec_pdf),
+            specular: f32x4::merge(fresnel_mask, f32x4::from(0.0), f32x4::from(1.0)),
         })
     }
 }

@@ -40,22 +40,21 @@ macro_rules! declare_channels {
         }
 
         pub enum ChannelTileStorage {
-            $($name(Vec<($storage, f32)>),)+
+            $($name(Vec<($storage)>),)+
         }
 
         impl ChannelTileStorage {
             fn new(kind: ChannelKind, res: Extent2u) -> Self {
                 use ChannelKind::*;
                 match kind {
-                    $($name => Self::$name(vec![($initialize, 0.0); res.w * res.h]),)+
+                    $($name => Self::$name(vec![($initialize); res.w * res.h]),)+
                 }
             }
 
             fn add_sample(&mut self, idx: usize, sample: &ChannelSample) {
                 match (self, sample) {
                     $((ChannelTileStorage::$name(ref mut buf), ChannelSample::$name(sample)) => {
-                        buf[idx].0 += *sample;
-                        buf[idx].1 += 1.0;
+                        buf[idx] += *sample;
                     },)+
                     _ => (),
                 }
@@ -80,7 +79,7 @@ macro_rules! declare_channels {
                 }
             }
 
-            pub fn copy_from_tile(&mut self, other: &ChannelTileStorage, full_res: Extent2u, tile_bounds: Aabru) -> Result<(), ()> {
+            pub fn copy_from_tile(&mut self, other: &ChannelTileStorage, full_res: Extent2u, tile_bounds: Aabru, samples: usize) -> Result<(), ()> {
                 let extent = tile_bounds.size();
                 match (self, other) {
                     $( (ChannelStorage::$name(this_buf), ChannelTileStorage::$name(tile_buf)) => {
@@ -88,8 +87,8 @@ macro_rules! declare_channels {
                             for y in 0..extent.h {
                                 let tile_idx = x + y * extent.w;
                                 let this_idx = (tile_bounds.min.x + x) + (tile_bounds.min.y + y) * full_res.w;
-                                let (tile_col_sum, tile_weight_sum) = tile_buf[tile_idx];
-                                this_buf[this_idx] = tile_col_sum / tile_weight_sum;
+                                let tile_samp_sum = tile_buf[tile_idx];
+                                this_buf[this_idx] = tile_samp_sum / samples as f32;
                             }
                         }
                         Ok(())
@@ -421,7 +420,7 @@ impl<'a, N: ArrayLength<ChannelStorage> + ArrayLength<ChannelTileStorage>> Film<
 
         let fis = FilterImportanceSampler::new(filter);
 
-        self.integrate_tiles(tiles, |tile| {
+        self.integrate_tiles(tiles, samples * 4, |tile| {
             let mut rng = SmallRng::seed_from_u64(tile.index as u64);
             // let mut rng = SmallRng::from_rng(thread_rng()).unwrap();
 
@@ -519,7 +518,7 @@ impl<'a, N: ArrayLength<ChannelStorage> + ArrayLength<ChannelTileStorage>> Film<
         });
     }
 
-    fn integrate_tiles<FN>(&mut self, tiles: Vec<Tile<N>>, integrate_tile: FN)
+    fn integrate_tiles<FN>(&mut self, tiles: Vec<Tile<N>>, samples: usize, integrate_tile: FN)
     where
         FN: FnOnce(&mut Tile<N>) + Send + Sync + Copy,
     {
@@ -532,7 +531,7 @@ impl<'a, N: ArrayLength<ChannelStorage> + ArrayLength<ChannelTileStorage>> Film<
                     scope.spawn_fifo(move |_| {
                         integrate_tile(&mut tile);
 
-                        this.tile_finished(tile, num_tiles, idx)
+                        this.tile_finished(tile, num_tiles, idx, samples)
                     })
                 }
             });
@@ -546,7 +545,7 @@ impl<'a, N: ArrayLength<ChannelStorage> + ArrayLength<ChannelTileStorage>> Film<
         self.progressive_epoch += 1;
     }
 
-    fn tile_finished(&self, tile: Tile<N>, num_tiles: usize, tile_idx: usize) {
+    fn tile_finished(&self, tile: Tile<N>, num_tiles: usize, tile_idx: usize, samples: usize) {
         if self.progressive_epoch != tile.epoch {
             panic!(
                 "Epoch mismatch! Expected: {}, got: {}",
@@ -577,7 +576,7 @@ impl<'a, N: ArrayLength<ChannelStorage> + ArrayLength<ChannelTileStorage>> Film<
             // Safe because we guarantee that we won't start modifying this chunk again
             // until the next epoch.
             channel
-                .copy_from_tile(tile_channel, self.res, tile_bounds)
+                .copy_from_tile(tile_channel, self.res, tile_bounds, samples)
                 .unwrap();
         }
     }

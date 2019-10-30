@@ -32,7 +32,7 @@ use std::time::Instant;
 use wide::f32x4;
 
 const RES: (usize, usize) = (1280, 720);
-const SAMPLES: usize = 32;
+const SAMPLES: usize = 8;
 
 fn setup() -> (CameraHandle, World) {
     let mut materials = MaterialStore::new();

@@ -33,20 +33,25 @@ impl<TR: WSequenced<Wec3> + Sequenced<Vec3>> Hitable for Sphere<TR> {
 
         let desc_pos = descrim.cmp_gt(f32x4::from(0.0));
 
-        let desc_sqrt = descrim.sqrt();
-
-        let t1 = (-b - desc_sqrt) / (f32x4::from(2.0) * a);
-        let t1_valid = t1.cmp_gt(t_range.start) & t1.cmp_le(t_range.end) & desc_pos;
-
-        let t2 = (-b + desc_sqrt) / (f32x4::from(2.0) * a);
-        let t2_valid = t2.cmp_gt(t_range.start) & t2.cmp_le(t_range.end) & desc_pos;
-
-        let take_t1 = t1.cmp_lt(t2) & t1_valid;
-
-        let t = f32x4::merge(take_t1, t2, t1);
-
         let miss = f32x4::from(wide::consts::MAX);
-        f32x4::merge(t1_valid | t2_valid, miss, t)
+
+        if desc_pos.move_mask() != 0b0000 {
+            let desc_sqrt = descrim.sqrt();
+
+            let t1 = (-b - desc_sqrt) / (f32x4::from(2.0) * a);
+            let t1_valid = t1.cmp_gt(t_range.start) & t1.cmp_le(t_range.end) & desc_pos;
+
+            let t2 = (-b + desc_sqrt) / (f32x4::from(2.0) * a);
+            let t2_valid = t2.cmp_gt(t_range.start) & t2.cmp_le(t_range.end) & desc_pos;
+
+            let take_t1 = t1.cmp_lt(t2) & t1_valid;
+
+            let t = f32x4::merge(take_t1, t2, t1);
+
+            f32x4::merge(t1_valid | t2_valid, miss, t)
+        } else {
+            miss
+        }
     }
 
     fn intersection_at(&self, ray: Ray, t: f32, point: Vec3) -> (MaterialHandle, Intersection) {
