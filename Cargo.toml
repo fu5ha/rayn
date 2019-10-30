@@ -27,4 +27,4 @@ num_cpus = "1.10"
 generic-array = "0.13"
 bumpalo = { version = "2.6", features = ["collections"] }
 wide = "0.2"
-widehard = { path = "../widehard" }
+ultraviolet = { path = "../ultraviolet" }

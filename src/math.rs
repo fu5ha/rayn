@@ -7,16 +7,16 @@ use rand::rngs::SmallRng;
 use rand::Rng;
 use vek::vec;
 
-pub type Vec3 = widehard::Vec3;
-pub type Wec3 = widehard::Wec3;
-pub type Vec2 = widehard::Vec2;
-pub type Wec2 = widehard::Wec2;
+pub type Vec3 = ultraviolet::Vec3;
+pub type Wec3 = ultraviolet::Wec3;
+pub type Vec2 = ultraviolet::Vec2;
+pub type Wec2 = ultraviolet::Wec2;
 pub type Vec2u = vec::repr_c::Vec2<usize>;
 pub type Aabru = vek::geom::repr_c::Aabr<usize>;
 pub type Extent2u = vek::vec::repr_c::Extent2<usize>;
 
-pub type Mat3 = widehard::Mat3;
-pub type Wat3 = widehard::Wat3;
+pub type Mat3 = ultraviolet::Mat3;
+pub type Wat3 = ultraviolet::Wat3;
 
 #[derive(Clone, Copy)]
 pub struct Transform {

@@ -411,9 +411,9 @@ dependencies = [
  "rayon 1.2.0 (registry+https://github.com/rust-lang/crates.io-index)",
  "sdfu 0.1.2 (registry+https://github.com/rust-lang/crates.io-index)",
  "splines 2.2.0 (registry+https://github.com/rust-lang/crates.io-index)",
+ "ultraviolet 0.1.0",
  "vek 0.9.9 (registry+https://github.com/rust-lang/crates.io-index)",
  "wide 0.2.3 (registry+https://github.com/rust-lang/crates.io-index)",
- "widehard 0.1.0",
 ]
 
 [[package]]
@@ -514,6 +514,13 @@ version = "1.11.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 
 [[package]]
+name = "ultraviolet"
+version = "0.1.0"
+dependencies = [
+ "wide 0.2.3 (registry+https://github.com/rust-lang/crates.io-index)",
+]
+
+[[package]]
 name = "unicode-xid"
 version = "0.1.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -542,13 +549,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 dependencies = [
  "bytemuck 0.1.0 (registry+https://github.com/rust-lang/crates.io-index)",
  "cfg-if 0.1.10 (registry+https://github.com/rust-lang/crates.io-index)",
-]
-
-[[package]]
-name = "widehard"
-version = "0.1.0"
-dependencies = [
- "wide 0.2.3 (registry+https://github.com/rust-lang/crates.io-index)",
 ]
 
 [metadata]
