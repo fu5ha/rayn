@@ -1,7 +1,6 @@
 use crate::material::{MaterialHandle, MaterialStore};
 use crate::math::{OrthonormalBasis, Vec2u, Vec3, Wat3, Wec3};
 use crate::ray::{Ray, WRay};
-use crate::spectrum::{Srgb, WSrgb};
 
 use wide::f32x4;
 
@@ -188,8 +187,8 @@ impl HitableStore {
         HitableStore(Vec::new())
     }
 
-    pub fn push(&mut self, hitable: Box<dyn Hitable>) {
-        self.0.push(hitable)
+    pub fn push<H: Hitable + 'static>(&mut self, hitable: H) {
+        self.0.push(Box::new(hitable))
     }
 }
 

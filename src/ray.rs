@@ -18,6 +18,7 @@ macro_rules! rays {
                 Self { time, origin, dir, radiance: $st::zero(), throughput: $st::one(), tile_coord, }
             }
 
+            #[allow(dead_code)]
             pub fn point_at(&self, t: $tt) -> $t {
                 self.dir.mul_add($t::new(t, t, t), self.origin)
             }

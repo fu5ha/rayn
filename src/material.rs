@@ -149,10 +149,6 @@ impl BSDF for DielectricBSDF {
         let fresnel_mask = fresnel_sample.cmp_lt(fresnel);
 
         Some(WScatteringEvent {
-            // wi: spec_bounce,
-            // f: spec_f * f32x4::from(0.8),
-            // pdf: spec_pdf,
-            // specular: f32x4::from(0.0),
             wi: Wec3::merge(fresnel_mask, diffuse_bounce, spec_bounce),
             f: WSrgb::merge(fresnel_mask, diffuse_f, spec_f),
             pdf: f32x4::merge(fresnel_mask, diffuse_pdf, spec_pdf),
@@ -161,13 +157,44 @@ impl BSDF for DielectricBSDF {
     }
 }
 
+pub struct Metallic<FG, RG> {
+    pub f0_gen: FG,
+    pub roughness_gen: RG,
+}
+
+impl<FG, RG> Metallic<FG, RG> {
+    pub fn new(f0_gen: FG, roughness_gen: RG) -> Self {
+        Self {
+            f0_gen,
+            roughness_gen,
+        }
+    }
+}
+
+impl<AG, RG> Material for Metallic<AG, RG>
+where
+    AG: WShadingParamGenerator<WSrgb> + Send + Sync,
+    RG: WShadingParamGenerator<f32x4> + Send + Sync,
+{
+    fn get_bsdf_at<'bump>(
+        &self,
+        intersection: &WIntersection,
+        bump: &'bump Bump,
+    ) -> &'bump mut dyn BSDF {
+        bump.alloc_with(|| MetallicBSDF {
+            f0: self.f0_gen.gen(intersection),
+            roughness: self.roughness_gen.gen(intersection),
+        })
+    }
+}
+
 #[derive(Clone, Copy)]
-pub struct MetalBSDF {
+pub struct MetallicBSDF {
     f0: WSrgb,
     roughness: f32x4,
 }
 
-impl BSDF for MetalBSDF {
+impl BSDF for MetallicBSDF {
     fn scatter(
         &self,
         wo: Wec3,

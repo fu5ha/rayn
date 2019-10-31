@@ -57,6 +57,13 @@ impl<T, F: Fn(f32) -> T + Send + Sync> Sequenced<T> for F {
     }
 }
 
+impl<F: Fn(f32) -> Vec3 + Send + Sync> WSequenced<Wec3> for F {
+    fn sample_at(&self, t: f32x4) -> Wec3 {
+        let ts = t.as_ref();
+        [self(ts[0]), self(ts[0]), self(ts[0]), self(ts[0])].into()
+    }
+}
+
 #[cfg(feature = "minterpolate")]
 pub use minterpolate_integration::*;
 #[cfg(feature = "minterpolate")]

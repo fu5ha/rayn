@@ -20,9 +20,8 @@ use film::{ChannelKind, Film};
 use filter::{BlackmanHarrisFilter, BoxFilter};
 use hitable::HitableStore;
 use integrator::PathTracingIntegrator;
-use material::{Dielectric, MaterialStore, Sky};
-use math::{Extent2u, Vec3, Wec3};
-use sdf::TracedSDF;
+use material::{Dielectric, MaterialStore, Metallic, Sky};
+use math::{Extent2u, Vec3};
 use spectrum::{Srgb, WSrgb};
 use sphere::Sphere;
 use world::World;
@@ -32,101 +31,46 @@ use std::time::Instant;
 use wide::f32x4;
 
 const RES: (usize, usize) = (1280, 720);
-const SAMPLES: usize = 8;
+const SAMPLES: usize = 32;
 
 fn setup() -> (CameraHandle, World) {
     let mut materials = MaterialStore::new();
     let ground = materials.add_material(Dielectric::new(
         WSrgb::splat(Srgb::new(0.25, 0.2, 0.35)),
-        f32x4::from(0.0),
+        f32x4::from(0.1),
+    ));
+
+    let gold = materials.add_material(Metallic::new(
+        WSrgb::splat(Srgb::new(0.75, 0.7, 0.5)),
+        f32x4::from(0.05),
+    ));
+
+    let gold_rough = materials.add_material(Metallic::new(
+        WSrgb::splat(Srgb::new(0.75, 0.7, 0.5)),
+        f32x4::from(0.3),
+    ));
+
+    let silver = materials.add_material(Metallic::new(
+        WSrgb::splat(Srgb::new(0.8, 0.8, 0.8)),
+        f32x4::from(0.05),
     ));
 
     let sky = materials.add_material(Sky {});
 
     let mut hitables = HitableStore::new();
-    hitables.push(Box::new(Sphere::new(
-        Vec3::new(0.0, -200.5, -1.0),
-        200.0,
-        ground,
-    )));
 
-    hitables.push(Box::new(Sphere::new(Vec3::new(0.0, 0.0, 0.0), 300.0, sky)));
+    hitables.push(Sphere::new(Vec3::new(0.0, 0.0, 0.0), 300.0, sky));
 
-    // hitables.push(Box::new(TracedSDF::new(
-    //     sdfu::Sphere::<f32>::new(0.45)
-    //         .subtract(sdfu::Box::new(Vec3::new(0.25, 0.25, 1.5)))
-    //         .union_smooth(
-    //             sdfu::Sphere::<f32>::new(0.3).translate(Vec3::new(0.3, 0.3, 0.0)),
-    //             0.1,
-    //         )
-    //         .union_smooth(
-    //             sdfu::Sphere::<f32>::new(0.3).translate(Vec3::new(-0.3, 0.3, 0.0)),
-    //             0.1,
-    //         )
-    //         .subtract(
-    //             sdfu::Box::new(Vec3::new(0.125, 0.125, 1.5)).translate(Vec3::new(-0.3, 0.3, 0.0)),
-    //         )
-    //         .subtract(
-    //             sdfu::Box::new(Vec3::new(0.125, 0.125, 1.5)).translate(Vec3::new(0.3, 0.3, 0.0)),
-    //         )
-    //         .subtract(sdfu::Box::new(Vec3::new(1.5, 0.1, 0.1)).translate(Vec3::new(0.0, 0.3, 0.0)))
-    //         .subtract(sdfu::Box::new(Vec3::new(0.2, 2.0, 0.2)))
-    //         .translate(Vec3::new(-0.2, 0.0, -1.0)),
-    //     Sphere::new(
-    //         TransformSequence::new(Vec3::new(-0.2, 0.0, -1.0), Quat::default()),
-    //         1.0,
-    //         ground,
-    //     ),
-    //     checkerboard,
-    // )));
-    hitables.push(Box::new(Sphere::new(
-        Vec3::new(0.0, 0.0, -1.0),
-        0.5,
-        ground,
-    )));
-    // hitables.push(Box::new(Sphere::new(
-    //     TransformSequence::new(Vec3::new(1.0, -0.25, -1.0), Quat::default()),
-    //     0.25,
-    //     gold,
-    // )));
-    // hitables.push(Box::new(Sphere::new(
-    //     TransformSequence::new(Vec3::new(-0.8, -0.2, -0.5), Quat::default()),
-    //     0.3,
-    //     silver,
-    // )));
-    // hitables.push(Box::new(Sphere::new(
-    //     TransformSequence::new(
-    //         |t: f32| -> Vec3 {
-    //             Vec3::new(
-    //                 0.2 - (t * std::f32::consts::PI).sin() * 0.15,
-    //                 -0.4,
-    //                 -0.35 - (t * std::f32::consts::PI).cos() * 0.15,
-    //             )
-    //         },
-    //         Quat::default(),
-    //     ),
-    //     0.1,
-    //     glass,
-    // )));
-    // hitables.push(Box::new(Sphere::new(
-    //     TransformSequence::new(Vec3::new(-0.25, -0.375, -0.15), Quat::default()),
-    //     0.125,
-    //     glass_rough,
-    // )));
-    // hitables.push(Box::new(Sphere::new(
-    //     TransformSequence::new(
-    //         |t: f32| -> Vec3 {
-    //             Vec3::new(
-    //                 -0.5 + (2.0 * t * std::f32::consts::PI).cos() * 1.5,
-    //                 -0.375,
-    //                 -0.5 - (2.0 * t * std::f32::consts::PI).sin() * 1.5,
-    //             )
-    //         },
-    //         Quat::default(),
-    //     ),
-    //     0.125,
-    //     gold_rough,
-    // )));
+    hitables.push(Sphere::new(Vec3::new(0.0, -200.5, -1.0), 200.0, ground));
+
+    hitables.push(Sphere::new(Vec3::new(0.0, 0.0, -1.0), 0.5, ground));
+    hitables.push(Sphere::new(Vec3::new(1.0, -0.25, -1.0), 0.25, gold));
+    hitables.push(Sphere::new(Vec3::new(-0.8, -0.2, -0.5), 0.3, silver));
+    hitables.push(Sphere::new(
+        Vec3::new(-0.325, -0.375, -0.325),
+        0.125,
+        gold_rough,
+    ));
 
     let camera = ThinLensCamera::new(
         RES.0 as f32 / RES.1 as f32,

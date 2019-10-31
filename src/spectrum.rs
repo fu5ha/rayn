@@ -46,6 +46,7 @@ macro_rules! srgbs {
                 $n($vt::one())
             }
 
+            #[allow(dead_code)]
             pub fn max_channel(&self) -> $tt {
                 self.0.component_max()
             }
@@ -62,10 +63,6 @@ macro_rules! srgbs {
 srgbs!(WSrgb => Wec3, f32x4, Srgb => Vec3, f32);
 
 impl Srgb {
-    pub fn is_black(&self) -> bool {
-        self.0.component_max() < 0.0001
-    }
-
     pub fn is_nan(&self) -> bool {
         std::iter::once(self.x.classify())
             .chain(std::iter::once(self.y.classify()))
