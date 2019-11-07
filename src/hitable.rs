@@ -14,7 +14,6 @@ pub struct Intersection {
     pub point: Vec3,
     pub offset_by: f32,
     pub normal: Vec3,
-    pub valid: bool,
 }
 
 impl Intersection {
@@ -25,17 +24,15 @@ impl Intersection {
             point,
             offset_by,
             normal,
-            valid: true,
         }
     }
     pub fn new_invalid() -> Self {
         Intersection {
-            ray: Ray::new(Vec3::zero(), Vec3::zero(), 0.0, Vec2u::zero()),
+            ray: Ray::new_invalid(),
             t: 0.0,
             point: Vec3::zero(),
             offset_by: 0.0,
             normal: Vec3::zero(),
-            valid: false,
         }
     }
 }
@@ -48,7 +45,6 @@ pub struct WIntersection {
     pub offset_by: f32x4,
     pub normal: Wec3,
     pub basis: Wat3,
-    pub valid: [bool; 4],
 }
 
 impl From<[Intersection; 4]> for WIntersection {
@@ -85,13 +81,6 @@ impl From<[Intersection; 4]> for WIntersection {
             intersections[3].t,
         );
 
-        let valid = [
-            intersections[0].valid,
-            intersections[1].valid,
-            intersections[2].valid,
-            intersections[3].valid,
-        ];
-
         Self {
             ray,
             t,
@@ -99,12 +88,21 @@ impl From<[Intersection; 4]> for WIntersection {
             offset_by,
             normal,
             basis,
-            valid,
         }
     }
 }
 
 impl WIntersection {
+    pub fn new(ray: WRay, t: f32x4, point: Wec3, offset_by: f32x4, normal: Wec3) -> Self {
+        WIntersection {
+            ray,
+            t,
+            point,
+            offset_by,
+            normal,
+            basis: normal.get_orthonormal_basis(),
+        }
+    }
     pub fn create_rays(&self, dir: Wec3) -> WRay {
         WRay::new(
             self.point + self.normal * self.normal.dot(dir).signum() * self.offset_by,
@@ -117,58 +115,60 @@ impl WIntersection {
 
 pub trait Hitable: Send + Sync {
     fn hit(&self, rays: &WRay, t_ranges: ::std::ops::Range<f32x4>) -> f32x4;
-    fn intersection_at(&self, ray: Ray, t: f32, point: Vec3) -> (MaterialHandle, Intersection);
+    fn intersection_at(&self, ray: WRay, t: f32x4) -> (MaterialHandle, WIntersection);
 }
 
 pub struct HitStore<'bump> {
-    hits: BumpVec<'bump, BumpVec<'bump, Intersection>>,
+    hits: BumpVec<'bump, BumpVec<'bump, (Ray, f32)>>,
 }
 
 impl<'bump> HitStore<'bump> {
-    pub fn from_material_store(bump: &'bump Bump, mat_store: &MaterialStore) -> Self {
-        let mut hits = BumpVec::with_capacity_in(mat_store.len(), bump);
-        for _ in 0..mat_store.len() {
+    pub fn from_material_store(bump: &'bump Bump, hitable_store: &HitableStore) -> Self {
+        let mut hits = BumpVec::with_capacity_in(hitable_store.len(), bump);
+        for _ in 0..hitable_store.len() {
             hits.push(BumpVec::new_in(bump))
         }
         Self { hits }
     }
 
-    pub fn add_hit(&mut self, mat_id: MaterialHandle, isec: Intersection) {
-        self.hits[mat_id.0].push(isec);
+    pub unsafe fn add_hit(&mut self, obj_id: usize, ray: Ray, t: f32) {
+        self.hits.get_unchecked_mut(obj_id).push((ray, t));
     }
 
-    pub fn prepare_wintersections(
+    pub fn process_hits(
         &mut self,
+        hitables: &HitableStore,
         wintersections: &mut BumpVec<'_, (MaterialHandle, WIntersection)>,
     ) {
-        let total_isecs = self
+        let total_hits = self
             .hits
             .iter_mut()
-            .map(|isecs| {
-                while isecs.len() % 4 != 0 {
-                    isecs.push(Intersection::new_invalid())
+            .map(|hits| {
+                while hits.len() % 4 != 0 {
+                    hits.push((Ray::new_invalid(), 0.0))
                 }
-                isecs.len()
+                hits.len()
             })
             .sum::<usize>();
 
-        wintersections.reserve(total_isecs / 4);
+        wintersections.reserve(total_hits / 4);
 
-        for (mat_id, isecs) in self.hits.iter_mut().enumerate() {
-            for isecs in isecs[0..].chunks(4) {
-                wintersections.push((
-                    MaterialHandle(mat_id),
-                    // Safe because we just assured that every window will have exactly
-                    // 4 members.
-                    WIntersection::from(unsafe {
-                        [
-                            *isecs.get_unchecked(0),
-                            *isecs.get_unchecked(1),
-                            *isecs.get_unchecked(2),
-                            *isecs.get_unchecked(3),
-                        ]
-                    }),
-                ));
+        for (obj_id, hits) in self.hits.iter_mut().enumerate() {
+            for hits in hits[0..].chunks(4) {
+                // Safe because we just assured that every window will have exactly
+                // 4 members.
+                let hits: [(Ray, f32); 4] = unsafe {
+                    [
+                        *hits.get_unchecked(0),
+                        *hits.get_unchecked(1),
+                        *hits.get_unchecked(2),
+                        *hits.get_unchecked(3),
+                    ]
+                };
+                let rays = WRay::from([hits[0].0, hits[1].0, hits[2].0, hits[3].0]);
+                let ts = f32x4::from([hits[0].1, hits[1].1, hits[2].1, hits[3].1]);
+                wintersections
+                    .push(unsafe { hitables.get_unchecked(obj_id) }.intersection_at(rays, ts));
             }
         }
     }
@@ -241,8 +241,9 @@ impl HitableStore {
             .zip(dists.iter())
         {
             if *id < std::usize::MAX {
-                let (mat, isec) = self[*id].intersection_at(*ray, *t, *point);
-                hit_store.add_hit(mat, isec);
+                unsafe {
+                    hit_store.add_hit(*id, *ray, *t);
+                }
             }
         }
     }

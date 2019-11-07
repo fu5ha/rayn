@@ -432,7 +432,7 @@ impl<'a, N: ArrayLength<ChannelStorage> + ArrayLength<ChannelTileStorage>> Film<
             let sample_bump = Bump::new();
             let mut new_samples = BumpVec::new_in(&sample_bump);
             let hit_bump = Bump::new();
-            let mut hit_store = HitStore::from_material_store(&hit_bump, &world.materials);
+            let mut hit_store = HitStore::from_material_store(&hit_bump, &world.hitables);
             let mut bsdf_bump = Bump::new();
 
             for x in tile.raster_bounds.min.x..tile.raster_bounds.max.x {
@@ -480,7 +480,7 @@ impl<'a, N: ArrayLength<ChannelStorage> + ArrayLength<ChannelTileStorage>> Film<
                     );
                 }
 
-                hit_store.prepare_wintersections(&mut wintersections);
+                hit_store.process_hits(&world.hitables, &mut wintersections);
 
                 for (mat_id, wisec) in wintersections.drain(..) {
                     integrator.integrate(

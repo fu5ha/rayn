@@ -418,9 +418,9 @@ dependencies = [
  "num_cpus 1.11.0 (registry+https://github.com/rust-lang/crates.io-index)",
  "rand 0.7.2 (registry+https://github.com/rust-lang/crates.io-index)",
  "rayon 1.2.0 (registry+https://github.com/rust-lang/crates.io-index)",
- "sdfu 0.1.2 (registry+https://github.com/rust-lang/crates.io-index)",
+ "sdfu 0.1.2",
  "splines 2.2.0 (registry+https://github.com/rust-lang/crates.io-index)",
- "ultraviolet 0.1.3",
+ "ultraviolet 0.2.0-alpha6",
  "vek 0.9.9 (registry+https://github.com/rust-lang/crates.io-index)",
  "wide 0.2.4 (registry+https://github.com/rust-lang/crates.io-index)",
 ]
@@ -468,9 +468,8 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 [[package]]
 name = "sdfu"
 version = "0.1.2"
-source = "registry+https://github.com/rust-lang/crates.io-index"
 dependencies = [
- "vek 0.9.9 (registry+https://github.com/rust-lang/crates.io-index)",
+ "ultraviolet 0.2.0-alpha6",
 ]
 
 [[package]]
@@ -524,7 +523,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 
 [[package]]
 name = "ultraviolet"
-version = "0.1.3"
+version = "0.2.0-alpha6"
 dependencies = [
  "wide 0.2.4 (registry+https://github.com/rust-lang/crates.io-index)",
 ]
@@ -617,7 +616,6 @@ dependencies = [
 "checksum rustc_version 0.2.3 (registry+https://github.com/rust-lang/crates.io-index)" = "138e3e0acb6c9fb258b19b67cb8abd63c00679d2851805ea151465464fe9030a"
 "checksum scoped_threadpool 0.1.9 (registry+https://github.com/rust-lang/crates.io-index)" = "1d51f5df5af43ab3f1360b429fa5e0152ac5ce8c0bd6485cae490332e96846a8"
 "checksum scopeguard 1.0.0 (registry+https://github.com/rust-lang/crates.io-index)" = "b42e15e59b18a828bbf5c58ea01debb36b9b096346de35d941dcb89009f24a0d"
-"checksum sdfu 0.1.2 (registry+https://github.com/rust-lang/crates.io-index)" = "3f51595240aa4fdceb99dd24036b64734256dc165d3da448e8cff02832cf4391"
 "checksum semver 0.9.0 (registry+https://github.com/rust-lang/crates.io-index)" = "1d7eb9ef2c18661902cc47e535f9bc51b78acd254da71d375c2f6720d9a40403"
 "checksum semver-parser 0.7.0 (registry+https://github.com/rust-lang/crates.io-index)" = "388a1df253eca08550bef6c72392cfe7c30914bf41df5269b68cbd6ff8f570a3"
 "checksum splines 2.2.0 (registry+https://github.com/rust-lang/crates.io-index)" = "19661e5f61c8c7e5e980737a63cab7281efdb68ca0de6172d4be86658c7d7114"

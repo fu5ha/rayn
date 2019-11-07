@@ -21,7 +21,8 @@ use filter::{BlackmanHarrisFilter, BoxFilter};
 use hitable::HitableStore;
 use integrator::PathTracingIntegrator;
 use material::{Dielectric, MaterialStore, Metallic, Sky};
-use math::{Extent2u, Vec3};
+use math::{Extent2u, Vec3, Wec3};
+use sdf::TracedSDF;
 use spectrum::{Srgb, WSrgb};
 use sphere::Sphere;
 use world::World;
@@ -31,7 +32,7 @@ use std::time::Instant;
 use wide::f32x4;
 
 const RES: (usize, usize) = (1280, 720);
-const SAMPLES: usize = 32;
+const SAMPLES: usize = 4;
 
 fn setup() -> (CameraHandle, World) {
     let mut materials = MaterialStore::new();
@@ -63,7 +64,35 @@ fn setup() -> (CameraHandle, World) {
 
     hitables.push(Sphere::new(Vec3::new(0.0, -200.5, -1.0), 200.0, ground));
 
-    hitables.push(Sphere::new(Vec3::new(0.0, 0.0, -1.0), 0.5, ground));
+    hitables.push(TracedSDF::new(
+        sdfu::Sphere::new(f32x4::from(0.45))
+            .subtract(sdfu::Box::new(Wec3::new_splat(0.25, 0.25, 1.5)))
+            .union_smooth(
+                sdfu::Sphere::new(f32x4::from(0.3)).translate(Wec3::new_splat(0.3, 0.3, 0.0)),
+                f32x4::from(0.1),
+            )
+            .union_smooth(
+                sdfu::Sphere::new(f32x4::from(0.3)).translate(Wec3::new_splat(-0.3, 0.3, 0.0)),
+                f32x4::from(0.1),
+            )
+            .subtract(
+                sdfu::Box::new(Wec3::new_splat(0.125, 0.125, 1.5))
+                    .translate(Wec3::new_splat(-0.3, 0.3, 0.0)),
+            )
+            .subtract(
+                sdfu::Box::new(Wec3::new_splat(0.125, 0.125, 1.5))
+                    .translate(Wec3::new_splat(0.3, 0.3, 0.0)),
+            )
+            .subtract(
+                sdfu::Box::new(Wec3::new_splat(1.5, 0.1, 0.1))
+                    .translate(Wec3::new_splat(0.0, 0.3, 0.0)),
+            )
+            .subtract(sdfu::Box::new(Wec3::new_splat(0.2, 2.0, 0.2)))
+            .translate(Wec3::new_splat(0.0, 0.0, -1.0)),
+        ground,
+    ));
+
+    // hitables.push(Sphere::new(Vec3::new(0.0, 0.0, -1.0), 0.5, ground));
     hitables.push(Sphere::new(Vec3::new(1.0, -0.25, -1.0), 0.25, gold));
     hitables.push(Sphere::new(Vec3::new(-0.8, -0.2, -0.5), 0.3, silver));
     hitables.push(Sphere::new(
@@ -75,7 +104,7 @@ fn setup() -> (CameraHandle, World) {
     let camera = ThinLensCamera::new(
         RES.0 as f32 / RES.1 as f32,
         60.0,
-        0.035,
+        0.025,
         Vec3::new(0.0, 0.0, 1.0),
         Vec3::new(0.0, 0.0, -1.0),
         Vec3::new(0.0, 1.0, 0.0),

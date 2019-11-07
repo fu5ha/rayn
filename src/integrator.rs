@@ -85,7 +85,7 @@ impl Integrator for PathTracingIntegrator {
                 .iter_mut()
                 .zip(throughputs.into_iter())
                 .zip(roulette_factor.as_ref().iter())
-                .zip(intersection.valid.iter())
+                .zip(intersection.ray.valid.iter())
             {
                 if *valid {
                     if depth >= self.max_bounces || rng.gen::<f32>() < *roulette_factor {
@@ -102,8 +102,8 @@ impl Integrator for PathTracingIntegrator {
         } else {
             let final_rays: [Ray; 4] = intersection.ray.into();
 
-            for (ray, valid) in final_rays.iter().zip(intersection.valid.iter()) {
-                if *valid {
+            for ray in final_rays.iter() {
+                if ray.valid {
                     let sample = if depth == 0 {
                         ChannelSample::Background(ray.radiance)
                     } else {

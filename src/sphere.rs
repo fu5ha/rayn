@@ -1,5 +1,5 @@
 use crate::animation::{Sequenced, WSequenced};
-use crate::hitable::{Hitable, Intersection};
+use crate::hitable::{Hitable, WIntersection};
 use crate::material::MaterialHandle;
 use crate::math::{Vec3, Wec3};
 use crate::ray::{Ray, WRay};
@@ -22,7 +22,7 @@ impl<TR> Sphere<TR> {
     }
 }
 
-impl<TR: WSequenced<Wec3> + Sequenced<Vec3>> Hitable for Sphere<TR> {
+impl<TR: WSequenced<Wec3>> Hitable for Sphere<TR> {
     fn hit(&self, ray: &WRay, t_range: ::std::ops::Range<f32x4>) -> f32x4 {
         let origin = WSequenced::sample_at(&self.transform_seq, ray.time);
         let oc = ray.origin - origin;
@@ -54,9 +54,13 @@ impl<TR: WSequenced<Wec3> + Sequenced<Vec3>> Hitable for Sphere<TR> {
         }
     }
 
-    fn intersection_at(&self, ray: Ray, t: f32, point: Vec3) -> (MaterialHandle, Intersection) {
-        let origin = Sequenced::sample_at(&self.transform_seq, ray.time);
+    fn intersection_at(&self, ray: WRay, t: f32x4) -> (MaterialHandle, WIntersection) {
+        let point = ray.point_at(t);
+        let origin = WSequenced::sample_at(&self.transform_seq, ray.time);
         let normal = (point - origin).normalized();
-        (self.material, Intersection::new(ray, t, point, 0.0, normal))
+        (
+            self.material,
+            WIntersection::new(ray, t, point, f32x4::from(0.0), normal),
+        )
     }
 }

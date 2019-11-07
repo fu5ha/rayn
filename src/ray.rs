@@ -2,7 +2,7 @@ use crate::math::{f32x4, Vec2u, Vec3, Wec3};
 use crate::spectrum::{Srgb, WSrgb};
 
 macro_rules! rays {
-    ($($n:ident => $t:ident, $st:ident, $tt:ident, $tc:ty),+) => {
+    ($($n:ident => $t:ident, $st:ident, $tt:ident, $tc:ty, $bt:ty),+) => {
         $(#[derive(Clone, Copy, Debug)]
         pub struct $n {
             pub time: $tt,
@@ -11,13 +11,10 @@ macro_rules! rays {
             pub radiance: $st,
             pub throughput: $st,
             pub tile_coord: $tc,
+            pub valid: $bt,
         }
 
         impl $n {
-            pub fn new(origin: $t, dir: $t, time: $tt, tile_coord: $tc) -> Self {
-                Self { time, origin, dir, radiance: $st::zero(), throughput: $st::one(), tile_coord, }
-            }
-
             #[allow(dead_code)]
             pub fn point_at(&self, t: $tt) -> $t {
                 self.dir.mul_add($t::new(t, t, t), self.origin)
@@ -26,7 +23,59 @@ macro_rules! rays {
     }
 }
 
-rays!(Ray => Vec3, Srgb, f32, Vec2u, WRay => Wec3, WSrgb, f32x4, [Vec2u; 4]);
+impl Ray {
+    pub fn new(origin: Vec3, dir: Vec3, time: f32, tile_coord: Vec2u) -> Self {
+        Self {
+            time,
+            origin,
+            dir,
+            radiance: Srgb::zero(),
+            throughput: Srgb::one(),
+            tile_coord,
+            valid: true,
+        }
+    }
+
+    pub fn new_invalid() -> Self {
+        Self {
+            time: 0.0,
+            origin: Vec3::zero(),
+            dir: Vec3::zero(),
+            radiance: Srgb::zero(),
+            throughput: Srgb::zero(),
+            tile_coord: Vec2u::zero(),
+            valid: false,
+        }
+    }
+}
+
+impl WRay {
+    pub fn new(origin: Wec3, dir: Wec3, time: f32x4, tile_coord: [Vec2u; 4]) -> Self {
+        Self {
+            time,
+            origin,
+            dir,
+            radiance: WSrgb::zero(),
+            throughput: WSrgb::one(),
+            tile_coord,
+            valid: [true, true, true, true],
+        }
+    }
+
+    pub fn new_invalid() -> Self {
+        Self {
+            time: f32x4::from(0.0),
+            origin: Wec3::zero(),
+            dir: Wec3::zero(),
+            radiance: WSrgb::zero(),
+            throughput: WSrgb::zero(),
+            tile_coord: [Vec2u::zero(); 4],
+            valid: [false, false, false, false],
+        }
+    }
+}
+
+rays!(Ray => Vec3, Srgb, f32, Vec2u, bool, WRay => Wec3, WSrgb, f32x4, [Vec2u; 4], [bool; 4]);
 
 impl From<[Ray; 4]> for WRay {
     fn from(rays: [Ray; 4]) -> Self {
@@ -57,6 +106,7 @@ impl From<[Ray; 4]> for WRay {
                 rays[2].tile_coord,
                 rays[3].tile_coord,
             ],
+            valid: [rays[0].valid, rays[1].valid, rays[2].valid, rays[3].valid],
         }
     }
 }
@@ -76,30 +126,34 @@ impl Into<[Ray; 4]> for WRay {
                 radiance: radiances[0],
                 throughput: throughputs[0],
                 tile_coord: self.tile_coord[0],
+                valid: self.valid[0],
             },
             Ray {
-                time: times[0],
+                time: times[1],
                 origin: origins[1],
                 dir: dirs[1],
                 radiance: radiances[1],
                 throughput: throughputs[1],
                 tile_coord: self.tile_coord[1],
+                valid: self.valid[1],
             },
             Ray {
-                time: times[0],
+                time: times[2],
                 origin: origins[2],
                 dir: dirs[2],
                 radiance: radiances[2],
                 throughput: throughputs[2],
                 tile_coord: self.tile_coord[2],
+                valid: self.valid[2],
             },
             Ray {
-                time: times[0],
+                time: times[3],
                 origin: origins[3],
                 dir: dirs[3],
                 radiance: radiances[3],
                 throughput: throughputs[3],
                 tile_coord: self.tile_coord[3],
+                valid: self.valid[3],
             },
         ]
     }
