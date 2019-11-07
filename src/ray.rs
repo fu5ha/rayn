@@ -61,18 +61,6 @@ impl WRay {
             valid: [true, true, true, true],
         }
     }
-
-    pub fn new_invalid() -> Self {
-        Self {
-            time: f32x4::from(0.0),
-            origin: Wec3::zero(),
-            dir: Wec3::zero(),
-            radiance: WSrgb::zero(),
-            throughput: WSrgb::zero(),
-            tile_coord: [Vec2u::zero(); 4],
-            valid: [false, false, false, false],
-        }
-    }
 }
 
 rays!(Ray => Vec3, Srgb, f32, Vec2u, bool, WRay => Wec3, WSrgb, f32x4, [Vec2u; 4], [bool; 4]);

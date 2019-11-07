@@ -1,9 +1,7 @@
-use crate::animation::WSequenced;
-use crate::hitable::{Hitable, WIntersection};
+use crate::hitable::{Hitable, WHit, WShadingPoint};
 use crate::material::MaterialHandle;
-use crate::math::{Transform, Vec3, Wec3};
-use crate::ray::{Ray, WRay};
-use crate::sphere::Sphere;
+use crate::math::Wec3;
+use crate::ray::WRay;
 
 use sdfu::*;
 use wide::f32x4;
@@ -40,13 +38,13 @@ impl<S: SDF<f32x4, Wec3> + Send + Sync> Hitable for TracedSDF<S> {
         t
     }
 
-    fn intersection_at(&self, ray: WRay, t: f32x4) -> (MaterialHandle, WIntersection) {
+    fn get_shading_info(&self, hit: WHit) -> (MaterialHandle, WShadingPoint) {
         let normals = self.sdf.normals(f32x4::from(0.005));
-        let point = ray.point_at(t);
+        let point = hit.point();
         let normal = normals.normal_at(point);
         (
             self.material,
-            WIntersection::new(ray, t, point, f32x4::from(0.002), normal),
+            WShadingPoint::new(hit, point, f32x4::from(0.002), normal),
         )
     }
 }

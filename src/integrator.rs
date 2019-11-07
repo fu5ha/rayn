@@ -4,7 +4,7 @@ use rand::rngs::SmallRng;
 use rand::Rng;
 
 use crate::film::ChannelSample;
-use crate::hitable::WIntersection;
+use crate::hitable::WShadingPoint;
 use crate::material::MaterialHandle;
 use crate::math::{Vec2u, Vec3};
 use crate::ray::Ray;
@@ -20,7 +20,7 @@ pub trait Integrator: Send + Sync {
         rng: &mut SmallRng,
         depth: usize,
         material: MaterialHandle,
-        intersection: WIntersection,
+        intersection: WShadingPoint,
         bump: &Bump,
         spawned_rays: &mut BumpVec<Ray>,
         output_samples: &mut BumpVec<(Vec2u, ChannelSample)>,
@@ -39,7 +39,7 @@ impl Integrator for PathTracingIntegrator {
         rng: &mut SmallRng,
         depth: usize,
         material: MaterialHandle,
-        mut intersection: WIntersection,
+        mut intersection: WShadingPoint,
         bump: &Bump,
         spawned_rays: &mut BumpVec<Ray>,
         output_samples: &mut BumpVec<(Vec2u, ChannelSample)>,

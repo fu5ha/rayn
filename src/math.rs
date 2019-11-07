@@ -15,7 +15,6 @@ pub type Vec2u = vec::repr_c::Vec2<usize>;
 pub type Aabru = vek::geom::repr_c::Aabr<usize>;
 pub type Extent2u = vek::vec::repr_c::Extent2<usize>;
 
-pub type Mat3 = ultraviolet::Mat3;
 pub type Wat3 = ultraviolet::Wat3;
 
 #[derive(Clone, Copy)]
@@ -81,6 +80,7 @@ impl RandomSample3d<f32x4> for Wec3 {
     }
 }
 
+#[allow(dead_code)]
 pub fn f0_from_ior(ior: f32x4) -> f32x4 {
     let f0 = (f32x4::from(1.0) - ior) / (f32x4::from(1.0) + ior);
     f0 * f0
@@ -94,6 +94,7 @@ pub fn f_schlick_c(cos: f32x4, f0: WSrgb) -> WSrgb {
     f0 + (WSrgb::one() - f0) * (f32x4::from(1.0) - cos).powi([5, 5, 5, 5])
 }
 
+#[allow(dead_code)]
 pub fn saturate(v: f32x4) -> f32x4 {
     v.min(f32x4::from(1.0)).max(f32x4::from(0.0))
 }

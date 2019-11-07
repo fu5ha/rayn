@@ -427,12 +427,12 @@ impl<'a, N: ArrayLength<ChannelStorage> + ArrayLength<ChannelTileStorage>> Film<
             let ray_bump = Bump::new();
             let mut spawned_rays = BumpVec::new_in(&ray_bump);
             let mut spawned_wrays = BumpVec::new_in(&ray_bump);
-            let isec_bump = Bump::new();
-            let mut wintersections = BumpVec::new_in(&isec_bump);
+            let shading_point_bump = Bump::new();
+            let mut wintersections = BumpVec::new_in(&shading_point_bump);
             let sample_bump = Bump::new();
             let mut new_samples = BumpVec::new_in(&sample_bump);
             let hit_bump = Bump::new();
-            let mut hit_store = HitStore::from_material_store(&hit_bump, &world.hitables);
+            let mut hit_store = HitStore::from_hitable_store(&hit_bump, &world.hitables);
             let mut bsdf_bump = Bump::new();
 
             for x in tile.raster_bounds.min.x..tile.raster_bounds.max.x {
@@ -482,13 +482,13 @@ impl<'a, N: ArrayLength<ChannelStorage> + ArrayLength<ChannelTileStorage>> Film<
 
                 hit_store.process_hits(&world.hitables, &mut wintersections);
 
-                for (mat_id, wisec) in wintersections.drain(..) {
+                for (mat_id, wshading_point) in wintersections.drain(..) {
                     integrator.integrate(
                         world,
                         &mut rng,
                         depth,
                         mat_id,
-                        wisec,
+                        wshading_point,
                         &bsdf_bump,
                         &mut spawned_rays,
                         &mut new_samples,
@@ -502,7 +502,7 @@ impl<'a, N: ArrayLength<ChannelStorage> + ArrayLength<ChannelTileStorage>> Film<
                 while spawned_rays.len() % 4 != 0 {
                     spawned_rays.push(Ray::new(Vec3::zero(), Vec3::zero(), 0.0, Vec2u::zero()));
                 }
-                for rays in spawned_rays[0..].chunks(4) {
+                for rays in spawned_rays[0..].chunks_exact(4) {
                     // Safe because we just ensured that it has the correct length
                     spawned_wrays.push(WRay::from(unsafe {
                         [

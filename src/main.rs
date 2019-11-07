@@ -17,7 +17,7 @@ mod world;
 
 use camera::{CameraHandle, CameraStore, ThinLensCamera};
 use film::{ChannelKind, Film};
-use filter::{BlackmanHarrisFilter, BoxFilter};
+use filter::BlackmanHarrisFilter;
 use hitable::HitableStore;
 use integrator::PathTracingIntegrator;
 use material::{Dielectric, MaterialStore, Metallic, Sky};

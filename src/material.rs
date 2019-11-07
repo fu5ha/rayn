@@ -3,25 +3,21 @@ use bumpalo::Bump;
 use rand::rngs::SmallRng;
 use rand::Rng;
 
-use crate::hitable::{Intersection, WIntersection};
-use crate::math::{
-    f0_from_ior, f_schlick, f_schlick_c, saturate, OrthonormalBasis, RandomSample3d, Vec3, Wec3,
-};
-use crate::spectrum::{Srgb, WSrgb};
+use crate::hitable::WShadingPoint;
+use crate::math::{f_schlick, f_schlick_c, OrthonormalBasis, RandomSample3d, Wec3};
+use crate::spectrum::WSrgb;
 
 use wide::f32x4;
-
-use std::any::Any;
 
 pub trait BSDF {
     fn scatter(
         &self,
         wo: Wec3,
-        intersection: &WIntersection,
+        intersection: &WShadingPoint,
         rng: &mut SmallRng,
     ) -> Option<WScatteringEvent>;
 
-    fn le(&self, _wo: Wec3, _intersection: &WIntersection) -> WSrgb {
+    fn le(&self, _wo: Wec3, _intersection: &WShadingPoint) -> WSrgb {
         WSrgb::zero()
     }
 }
@@ -29,7 +25,7 @@ pub trait BSDF {
 pub trait Material: Send + Sync {
     fn get_bsdf_at<'bump>(
         &self,
-        intersection: &WIntersection,
+        intersection: &WShadingPoint,
         bump: &'bump Bump,
     ) -> &'bump mut dyn BSDF;
 }
@@ -59,18 +55,14 @@ impl MaterialStore {
     pub fn get(&self, handle: MaterialHandle) -> &dyn Material {
         self.0[handle.0].as_ref()
     }
-
-    pub fn len(&self) -> usize {
-        self.0.len()
-    }
 }
 
 pub trait WShadingParamGenerator<T> {
-    fn gen(&self, intersection: &WIntersection) -> T;
+    fn gen(&self, intersection: &WShadingPoint) -> T;
 }
 
 impl<T, I: Into<T> + Copy> WShadingParamGenerator<T> for I {
-    fn gen(&self, _intersection: &WIntersection) -> T {
+    fn gen(&self, _intersection: &WShadingPoint) -> T {
         (*self).into()
     }
 }
@@ -102,7 +94,7 @@ where
 {
     fn get_bsdf_at<'bump>(
         &self,
-        intersection: &WIntersection,
+        intersection: &WShadingPoint,
         bump: &'bump Bump,
     ) -> &'bump mut dyn BSDF {
         bump.alloc_with(|| DielectricBSDF {
@@ -116,7 +108,7 @@ impl BSDF for DielectricBSDF {
     fn scatter(
         &self,
         wo: Wec3,
-        intersection: &WIntersection,
+        intersection: &WShadingPoint,
         rng: &mut SmallRng,
     ) -> Option<WScatteringEvent> {
         let norm = intersection.normal;
@@ -178,7 +170,7 @@ where
 {
     fn get_bsdf_at<'bump>(
         &self,
-        intersection: &WIntersection,
+        intersection: &WShadingPoint,
         bump: &'bump Bump,
     ) -> &'bump mut dyn BSDF {
         bump.alloc_with(|| MetallicBSDF {
@@ -198,7 +190,7 @@ impl BSDF for MetallicBSDF {
     fn scatter(
         &self,
         wo: Wec3,
-        intersection: &WIntersection,
+        intersection: &WShadingPoint,
         rng: &mut SmallRng,
     ) -> Option<WScatteringEvent> {
         let sample = Wec3::cosine_weighted_in_hemisphere(rng, self.roughness);
@@ -238,7 +230,7 @@ impl BSDF for MetallicBSDF {
 //     fn scatter(
 //         &self,
 //         wo: Wec3,
-//         intersection: &mut WIntersection,
+//         intersection: &mut WShadingPoint,
 //         rng: &mut SmallRng,
 //     ) -> WScatteringEvent {
 //         let norm = intersection.normal;
@@ -293,7 +285,7 @@ pub struct Sky {}
 impl Material for Sky {
     fn get_bsdf_at<'bump>(
         &self,
-        _intersection: &WIntersection,
+        _intersection: &WShadingPoint,
         bump: &'bump Bump,
     ) -> &'bump mut dyn BSDF {
         bump.alloc_with(|| SkyBSDF {})
@@ -307,13 +299,13 @@ impl BSDF for SkyBSDF {
     fn scatter(
         &self,
         _wo: Wec3,
-        _intersection: &WIntersection,
+        _intersection: &WShadingPoint,
         _rng: &mut SmallRng,
     ) -> Option<WScatteringEvent> {
         None
     }
 
-    fn le(&self, wo: Wec3, _intersection: &WIntersection) -> WSrgb {
+    fn le(&self, wo: Wec3, _intersection: &WShadingPoint) -> WSrgb {
         let dir = -wo;
         let t = f32x4::from(0.5) * (dir.y + f32x4::from(1.0));
 
@@ -336,63 +328,13 @@ where
     fn scatter(
         &self,
         wo: Wec3,
-        intersection: &WIntersection,
+        intersection: &WShadingPoint,
         rng: &mut SmallRng,
     ) -> Option<WScatteringEvent> {
         self.inner.scatter(wo, intersection, rng)
     }
 
-    fn le(&self, _wo: Wec3, _intersection: &WIntersection) -> WSrgb {
+    fn le(&self, _wo: Wec3, _intersection: &WShadingPoint) -> WSrgb {
         self.emission
     }
 }
-
-// #[derive(Copy, Clone)]
-// pub struct Checkerboard3d<M1, M2> {
-//     pub mat1: M1,
-//     pub mat2: M2,
-//     pub scale: Vec3,
-// }
-
-// impl<M1, M2> Checkerboard3d<M1, M2> {
-//     pub fn new(scale: Vec3, mat1: M1, mat2: M2) -> Self {
-//         Checkerboard3d { scale, mat1, mat2 }
-//     }
-// }
-
-// trait ModuloSigned {
-//     fn modulo(&self, n: Self) -> Self;
-// }
-
-// impl<T> ModuloSigned for T
-// where
-//     T: std::ops::Add<Output = T> + std::ops::Rem<Output = T> + Copy,
-// {
-//     fn modulo(&self, n: T) -> T {
-//         (*self % n + n) % n
-//     }
-// }
-
-// impl<S, M1, M2> Material<S> for Checkerboard3d<M1, M2>
-// where
-//     S: IsSpectrum,
-//     M1: Material<S>,
-//     M2: Material<S>,
-// {
-//     fn setup_scattering_functions<'bsdf, 'arena: 'bsdf>(
-//         &self,
-//         intersection: &mut Intersection,
-//         arena: &'arena DynamicArena<'_, NonSend>,
-//     ) -> &'bsdf dyn BSDF<S> {
-//         let p = intersection.point;
-//         let in_x = p.x.modulo(self.scale.x * 2.0) < self.scale.x;
-//         let in_y = p.y.modulo(self.scale.y * 2.0) < self.scale.y;
-//         let in_z = p.z.modulo(self.scale.z * 2.0) < self.scale.z;
-//         let inside = (in_x == in_y) == in_z;
-//         if inside {
-//             self.mat1.setup_scattering_functions(intersection, arena)
-//         } else {
-//             self.mat2.setup_scattering_functions(intersection, arena)
-//         }
-//     }
-// }

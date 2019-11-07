@@ -1,8 +1,8 @@
-use crate::animation::{Sequenced, WSequenced};
-use crate::hitable::{Hitable, WIntersection};
+use crate::animation::WSequenced;
+use crate::hitable::{Hitable, WHit, WShadingPoint};
 use crate::material::MaterialHandle;
-use crate::math::{Vec3, Wec3};
-use crate::ray::{Ray, WRay};
+use crate::math::Wec3;
+use crate::ray::WRay;
 
 use wide::f32x4;
 
@@ -54,13 +54,13 @@ impl<TR: WSequenced<Wec3>> Hitable for Sphere<TR> {
         }
     }
 
-    fn intersection_at(&self, ray: WRay, t: f32x4) -> (MaterialHandle, WIntersection) {
-        let point = ray.point_at(t);
-        let origin = WSequenced::sample_at(&self.transform_seq, ray.time);
+    fn get_shading_info(&self, hit: WHit) -> (MaterialHandle, WShadingPoint) {
+        let point = hit.point();
+        let origin = WSequenced::sample_at(&self.transform_seq, hit.ray.time);
         let normal = (point - origin).normalized();
         (
             self.material,
-            WIntersection::new(ray, t, point, f32x4::from(0.0), normal),
+            WShadingPoint::new(hit, point, f32x4::from(0.0), normal),
         )
     }
 }
