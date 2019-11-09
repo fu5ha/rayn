@@ -6,7 +6,7 @@ use crate::ray::WRay;
 use sdfu::*;
 use wide::f32x4;
 
-const MAX_MARCHES: u32 = 200;
+const MAX_MARCHES: u32 = 100;
 
 pub struct TracedSDF<S> {
     sdf: S,
@@ -39,7 +39,7 @@ impl<S: SDF<f32x4, Wec3> + Send + Sync> Hitable for TracedSDF<S> {
     }
 
     fn get_shading_info(&self, hit: WHit) -> (MaterialHandle, WShadingPoint) {
-        let normals = self.sdf.normals(f32x4::from(0.005));
+        let normals = self.sdf.normals_fast(f32x4::from(0.001));
         let point = hit.point();
         let normal = normals.normal_at(point);
         (

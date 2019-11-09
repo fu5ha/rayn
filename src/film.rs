@@ -184,20 +184,15 @@ impl<'a, N: ArrayLength<ChannelStorage>> Film<N> {
     pub fn new(channels: &[ChannelKind], res: Extent2u) -> Result<Self, String> {
         let mut channel_indices = HashMap::new();
         for (i, kind) in channels.iter().enumerate() {
-            if let Some(_) = channel_indices.insert(*kind, i) {
-                return Err(String::from(format!(
-                    "Attempted to create multiple {:?} channels",
-                    *kind
-                )));
+            if channel_indices.insert(*kind, i).is_some() {
+                return Err(format!("Attempted to create multiple {:?} channels", *kind));
             }
         }
         Ok(Film {
             channel_indices,
             channels: Mutex::new(
                 GenericArray::from_exact_iter(
-                    channels
-                        .into_iter()
-                        .map(|kind| ChannelStorage::new(*kind, res)),
+                    channels.iter().map(|kind| ChannelStorage::new(*kind, res)),
                 )
                 .expect("Generic type length does not match the number of channels."),
             ),
@@ -235,7 +230,7 @@ impl<'a, N: ArrayLength<ChannelStorage>> Film<N> {
                                 let idx = x as usize + (self.res.h - 1 - y as usize) * self.res.w;
                                 let col = color_buf[idx];
                                 let a = alpha_buf[idx];
-                                let rgb = Srgb::from(col).saturated().gamma_corrected(2.2) * a;
+                                let rgb = col.saturated().gamma_corrected(2.2) * a;
                                 *pixel = image::Rgba([
                                     (rgb.x * 255.0).min(255.0).max(0.0) as u8,
                                     (rgb.y * 255.0).min(255.0).max(0.0) as u8,
@@ -277,7 +272,7 @@ impl<'a, N: ArrayLength<ChannelStorage>> Film<N> {
                                 image::RgbImage::new(self.res.w as u32, self.res.h as u32);
                             for (x, y, pixel) in img.enumerate_pixels_mut() {
                                 let idx = x as usize + (self.res.h - 1 - y as usize) * self.res.w;
-                                let rgb = Srgb::from(color_buf[idx]).gamma_corrected(2.2);
+                                let rgb = color_buf[idx].gamma_corrected(2.2);
                                 *pixel = image::Rgb([
                                     (rgb.x * 255.0).min(255.0).max(0.0) as u8,
                                     (rgb.y * 255.0).min(255.0).max(0.0) as u8,
@@ -298,18 +293,19 @@ impl<'a, N: ArrayLength<ChannelStorage>> Film<N> {
                     }
                 }
                 ChannelKind::Background => {
-                    let idx =
-                        *self
-                            .channel_indices
-                            .get(&ChannelKind::Background)
-                            .ok_or(String::from(
+                    let idx = *self
+                        .channel_indices
+                        .get(&ChannelKind::Background)
+                        .ok_or_else(|| {
+                            String::from(
                                 "Attempted to write Background channel but it didn't exist",
-                            ))?;
+                            )
+                        })?;
                     let buf = channel_storage_index!(channels, Background, idx);
                     let mut img = image::RgbImage::new(self.res.w as u32, self.res.h as u32);
                     for (x, y, pixel) in img.enumerate_pixels_mut() {
                         let idx = x as usize + (self.res.h - 1 - y as usize) * self.res.w;
-                        let rgb = Srgb::from(buf[idx]).saturated().gamma_corrected(2.2);
+                        let rgb = buf[idx].saturated().gamma_corrected(2.2);
                         *pixel = image::Rgb([
                             (rgb.x * 255.0).min(255.0).max(0.0) as u8,
                             (rgb.y * 255.0).min(255.0).max(0.0) as u8,
@@ -323,9 +319,14 @@ impl<'a, N: ArrayLength<ChannelStorage>> Film<N> {
                     img.save(filename).unwrap();
                 }
                 ChannelKind::WorldNormal => {
-                    let idx = *self.channel_indices.get(&ChannelKind::WorldNormal).ok_or(
-                        String::from("Attempted to write WorldNormal channel but it didn't exist"),
-                    )?;
+                    let idx = *self
+                        .channel_indices
+                        .get(&ChannelKind::WorldNormal)
+                        .ok_or_else(|| {
+                            String::from(
+                                "Attempted to write WorldNormal channel but it didn't exist",
+                            )
+                        })?;
                     let buf = channel_storage_index!(channels, WorldNormal, idx);
                     let mut img = image::RgbImage::new(self.res.w as u32, self.res.h as u32);
                     for (x, y, pixel) in img.enumerate_pixels_mut() {
@@ -345,13 +346,12 @@ impl<'a, N: ArrayLength<ChannelStorage>> Film<N> {
                     img.save(filename).unwrap();
                 }
                 ChannelKind::Alpha => {
-                    let idx =
-                        *self
-                            .channel_indices
-                            .get(&ChannelKind::Alpha)
-                            .ok_or(String::from(
-                                "Attempted to write Alpha channel but it didn't exist",
-                            ))?;
+                    let idx = *self
+                        .channel_indices
+                        .get(&ChannelKind::Alpha)
+                        .ok_or_else(|| {
+                            String::from("Attempted to write Alpha channel but it didn't exist")
+                        })?;
                     let buf = channel_storage_index!(channels, Alpha, idx);
                     let mut img = image::GrayImage::new(self.res.w as u32, self.res.h as u32);
                     for (x, y, pixel) in img.enumerate_pixels_mut() {
@@ -372,6 +372,7 @@ impl<'a, N: ArrayLength<ChannelStorage>> Film<N> {
 }
 
 impl<'a, N: ArrayLength<ChannelStorage> + ArrayLength<ChannelTileStorage>> Film<N> {
+    #[allow(clippy::too_many_arguments)]
     pub fn render_frame_into<I, F>(
         &'a mut self,
         world: &World,
@@ -466,7 +467,7 @@ impl<'a, N: ArrayLength<ChannelStorage> + ArrayLength<ChannelTileStorage>> Film<
             for depth in 0.. {
                 bsdf_bump.reset();
 
-                if spawned_wrays.len() <= 0 {
+                if spawned_wrays.is_empty() {
                     break;
                 }
 
@@ -595,7 +596,5 @@ fn sample_uv(
 
     let screen_coord = Vec2::new(x as f32 + 0.5, y as f32 + 0.5) + fis_samp;
 
-    let ndc = screen_to_ndc_size * screen_coord;
-
-    ndc
+    screen_to_ndc_size * screen_coord
 }

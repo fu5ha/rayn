@@ -23,7 +23,7 @@ use integrator::PathTracingIntegrator;
 use material::{Dielectric, MaterialStore, Metallic, Sky};
 use math::{Extent2u, Vec3, Wec3};
 use sdf::TracedSDF;
-use spectrum::{Srgb, WSrgb};
+use spectrum::WSrgb;
 use sphere::Sphere;
 use world::World;
 
@@ -32,27 +32,32 @@ use std::time::Instant;
 use wide::f32x4;
 
 const RES: (usize, usize) = (1280, 720);
-const SAMPLES: usize = 4;
+const SAMPLES: usize = 12;
 
 fn setup() -> (CameraHandle, World) {
     let mut materials = MaterialStore::new();
     let ground = materials.add_material(Dielectric::new(
-        WSrgb::splat(Srgb::new(0.25, 0.2, 0.35)),
+        WSrgb::new_splat(0.25, 0.2, 0.35),
+        f32x4::from(0.1),
+    ));
+
+    let pink = materials.add_material(Dielectric::new(
+        WSrgb::new_splat(0.75, 0.5, 0.55),
         f32x4::from(0.1),
     ));
 
     let gold = materials.add_material(Metallic::new(
-        WSrgb::splat(Srgb::new(0.75, 0.7, 0.5)),
+        WSrgb::new_splat(0.75, 0.7, 0.5),
         f32x4::from(0.05),
     ));
 
     let gold_rough = materials.add_material(Metallic::new(
-        WSrgb::splat(Srgb::new(0.75, 0.7, 0.5)),
+        WSrgb::new_splat(0.75, 0.7, 0.5),
         f32x4::from(0.3),
     ));
 
     let silver = materials.add_material(Metallic::new(
-        WSrgb::splat(Srgb::new(0.8, 0.8, 0.8)),
+        WSrgb::new_splat(0.9, 0.9, 0.9),
         f32x4::from(0.05),
     ));
 
@@ -89,7 +94,7 @@ fn setup() -> (CameraHandle, World) {
             )
             .subtract(sdfu::Box::new(Wec3::new_splat(0.2, 2.0, 0.2)))
             .translate(Wec3::new_splat(0.0, 0.0, -1.0)),
-        ground,
+        pink,
     ));
 
     // hitables.push(Sphere::new(Vec3::new(0.0, 0.0, -1.0), 0.5, ground));

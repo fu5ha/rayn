@@ -208,10 +208,10 @@ impl FilterImportanceSampler {
 
         let mut inverse_cdf = [0.0; FILTER_TABLE_SIZE];
 
-        for n in 0..FILTER_TABLE_SIZE {
+        for (n, inv_cdf_item) in inverse_cdf.iter_mut().enumerate() {
             let u = n as f32 / (FILTER_TABLE_SIZE - 1) as f32;
             let cdf_u = cdf.sample(u).unwrap();
-            inverse_cdf[n] = cdf_u.0;
+            *inv_cdf_item = cdf_u.0;
         }
 
         FilterImportanceSampler { inverse_cdf }

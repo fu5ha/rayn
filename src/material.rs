@@ -23,6 +23,7 @@ pub trait BSDF {
 }
 
 pub trait Material: Send + Sync {
+    #[allow(clippy::mut_from_ref)]
     fn get_bsdf_at<'bump>(
         &self,
         intersection: &WShadingPoint,

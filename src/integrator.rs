@@ -14,6 +14,7 @@ use crate::world::World;
 use wide::f32x4;
 
 pub trait Integrator: Send + Sync {
+    #[allow(clippy::too_many_arguments)]
     fn integrate(
         &self,
         world: &World,
@@ -47,7 +48,7 @@ impl Integrator for PathTracingIntegrator {
         let wi = intersection.ray.dir;
         let material = world.materials.get(material);
 
-        let bsdf = material.get_bsdf_at(&mut intersection, bump);
+        let bsdf = material.get_bsdf_at(&intersection, bump);
 
         intersection.ray.radiance += bsdf.le(-wi, &intersection) * intersection.ray.throughput;
 
@@ -83,7 +84,7 @@ impl Integrator for PathTracingIntegrator {
 
             for (((ray, new_throughput), roulette_factor), valid) in new_rays
                 .iter_mut()
-                .zip(throughputs.into_iter())
+                .zip(throughputs.iter())
                 .zip(roulette_factor.as_ref().iter())
                 .zip(intersection.ray.valid.iter())
             {

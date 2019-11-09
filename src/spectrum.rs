@@ -21,6 +21,7 @@ macro_rules! srgbs {
         }
 
         impl $n {
+            #[allow(dead_code)]
             pub fn new(r: $tt, g: $tt, b: $tt) -> Self {
                 $n($vt::new(r, g, b))
             }
@@ -67,8 +68,8 @@ impl Srgb {
         std::iter::once(self.x.classify())
             .chain(std::iter::once(self.y.classify()))
             .chain(std::iter::once(self.z.classify()))
-            .fold(false, |acc, class| {
-                acc || if let std::num::FpCategory::Nan = class {
+            .any(|class| {
+                if let std::num::FpCategory::Nan = class {
                     true
                 } else {
                     false
@@ -82,6 +83,15 @@ impl WSrgb {
         Self(Wec3::merge(mask, a.0, b.0))
     }
 
+    pub fn new_splat(r: f32, g: f32, b: f32) -> Self {
+        Self(Wec3 {
+            x: f32x4::from(r),
+            y: f32x4::from(g),
+            z: f32x4::from(b),
+        })
+    }
+
+    #[allow(dead_code)]
     pub fn splat(srgb: Srgb) -> Self {
         Self(Wec3::splat(srgb.0))
     }
