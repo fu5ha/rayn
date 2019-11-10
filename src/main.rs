@@ -22,7 +22,7 @@ use hitable::HitableStore;
 use integrator::PathTracingIntegrator;
 use material::{Dielectric, MaterialStore, Metallic, Sky};
 use math::{Extent2u, Vec3, Wec3};
-use sdf::TracedSDF;
+use sdf::{BoxFold, KalaedescopicIfs, SphereFold, TracedSDF};
 use spectrum::WSrgb;
 use sphere::Sphere;
 use world::World;
@@ -32,34 +32,34 @@ use std::time::Instant;
 use wide::f32x4;
 
 const RES: (usize, usize) = (1280, 720);
-const SAMPLES: usize = 12;
+const SAMPLES: usize = 4;
 
 fn setup() -> (CameraHandle, World) {
     let mut materials = MaterialStore::new();
-    let ground = materials.add_material(Dielectric::new(
-        WSrgb::new_splat(0.25, 0.2, 0.35),
-        f32x4::from(0.1),
-    ));
+    // let ground = materials.add_material(Dielectric::new(
+    //     WSrgb::new_splat(0.25, 0.2, 0.35),
+    //     f32x4::from(0.1),
+    // ));
 
     let pink = materials.add_material(Dielectric::new(
         WSrgb::new_splat(0.75, 0.5, 0.55),
         f32x4::from(0.1),
     ));
 
-    let gold = materials.add_material(Metallic::new(
-        WSrgb::new_splat(0.75, 0.7, 0.5),
-        f32x4::from(0.05),
-    ));
+    // let gold = materials.add_material(Metallic::new(
+    //     WSrgb::new_splat(0.75, 0.7, 0.5),
+    //     f32x4::from(0.05),
+    // ));
 
-    let gold_rough = materials.add_material(Metallic::new(
-        WSrgb::new_splat(0.75, 0.7, 0.5),
-        f32x4::from(0.3),
-    ));
+    // let gold_rough = materials.add_material(Metallic::new(
+    //     WSrgb::new_splat(0.75, 0.7, 0.5),
+    //     f32x4::from(0.3),
+    // ));
 
-    let silver = materials.add_material(Metallic::new(
-        WSrgb::new_splat(0.9, 0.9, 0.9),
-        f32x4::from(0.05),
-    ));
+    // let silver = materials.add_material(Metallic::new(
+    //     WSrgb::new_splat(0.9, 0.9, 0.9),
+    //     f32x4::from(0.05),
+    // ));
 
     let sky = materials.add_material(Sky {});
 
@@ -67,51 +67,56 @@ fn setup() -> (CameraHandle, World) {
 
     hitables.push(Sphere::new(Vec3::new(0.0, 0.0, 0.0), 300.0, sky));
 
-    hitables.push(Sphere::new(Vec3::new(0.0, -200.5, -1.0), 200.0, ground));
-
     hitables.push(TracedSDF::new(
-        sdfu::Sphere::new(f32x4::from(0.45))
-            .subtract(sdfu::Box::new(Wec3::new_splat(0.25, 0.25, 1.5)))
-            .union_smooth(
-                sdfu::Sphere::new(f32x4::from(0.3)).translate(Wec3::new_splat(0.3, 0.3, 0.0)),
-                f32x4::from(0.1),
-            )
-            .union_smooth(
-                sdfu::Sphere::new(f32x4::from(0.3)).translate(Wec3::new_splat(-0.3, 0.3, 0.0)),
-                f32x4::from(0.1),
-            )
-            .subtract(
-                sdfu::Box::new(Wec3::new_splat(0.125, 0.125, 1.5))
-                    .translate(Wec3::new_splat(-0.3, 0.3, 0.0)),
-            )
-            .subtract(
-                sdfu::Box::new(Wec3::new_splat(0.125, 0.125, 1.5))
-                    .translate(Wec3::new_splat(0.3, 0.3, 0.0)),
-            )
-            .subtract(
-                sdfu::Box::new(Wec3::new_splat(1.5, 0.1, 0.1))
-                    .translate(Wec3::new_splat(0.0, 0.3, 0.0)),
-            )
-            .subtract(sdfu::Box::new(Wec3::new_splat(0.2, 2.0, 0.2)))
-            .translate(Wec3::new_splat(0.0, 0.0, -1.0)),
+        KalaedescopicIfs::new(3, BoxFold::new(1.0), SphereFold::new(0.5), 2.0),
         pink,
     ));
 
-    // hitables.push(Sphere::new(Vec3::new(0.0, 0.0, -1.0), 0.5, ground));
-    hitables.push(Sphere::new(Vec3::new(1.0, -0.25, -1.0), 0.25, gold));
-    hitables.push(Sphere::new(Vec3::new(-0.8, -0.2, -0.5), 0.3, silver));
-    hitables.push(Sphere::new(
-        Vec3::new(-0.325, -0.375, -0.325),
-        0.125,
-        gold_rough,
-    ));
+    // hitables.push(Sphere::new(Vec3::new(0.0, -200.5, -1.0), 200.0, ground));
+
+    // hitables.push(TracedSDF::new(
+    //     sdfu::Sphere::new(f32x4::from(0.45))
+    //         .subtract(sdfu::Box::new(Wec3::new_splat(0.25, 0.25, 1.5)))
+    //         .union_smooth(
+    //             sdfu::Sphere::new(f32x4::from(0.3)).translate(Wec3::new_splat(0.3, 0.3, 0.0)),
+    //             f32x4::from(0.1),
+    //         )
+    //         .union_smooth(
+    //             sdfu::Sphere::new(f32x4::from(0.3)).translate(Wec3::new_splat(-0.3, 0.3, 0.0)),
+    //             f32x4::from(0.1),
+    //         )
+    //         .subtract(
+    //             sdfu::Box::new(Wec3::new_splat(0.125, 0.125, 1.5))
+    //                 .translate(Wec3::new_splat(-0.3, 0.3, 0.0)),
+    //         )
+    //         .subtract(
+    //             sdfu::Box::new(Wec3::new_splat(0.125, 0.125, 1.5))
+    //                 .translate(Wec3::new_splat(0.3, 0.3, 0.0)),
+    //         )
+    //         .subtract(
+    //             sdfu::Box::new(Wec3::new_splat(1.5, 0.1, 0.1))
+    //                 .translate(Wec3::new_splat(0.0, 0.3, 0.0)),
+    //         )
+    //         .subtract(sdfu::Box::new(Wec3::new_splat(0.2, 2.0, 0.2)))
+    //         .translate(Wec3::new_splat(0.0, 0.0, -1.0)),
+    //     pink,
+    // ));
+
+    // // hitables.push(Sphere::new(Vec3::new(0.0, 0.0, -1.0), 0.5, ground));
+    // hitables.push(Sphere::new(Vec3::new(1.0, -0.25, -1.0), 0.25, gold));
+    // hitables.push(Sphere::new(Vec3::new(-0.8, -0.2, -0.5), 0.3, silver));
+    // hitables.push(Sphere::new(
+    //     Vec3::new(-0.325, -0.375, -0.325),
+    //     0.125,
+    //     gold_rough,
+    // ));
 
     let camera = ThinLensCamera::new(
         RES.0 as f32 / RES.1 as f32,
         60.0,
         0.025,
-        Vec3::new(0.0, 0.0, 1.0),
-        Vec3::new(0.0, 0.0, -1.0),
+        Vec3::new(5.0, 0.0, 10.0),
+        Vec3::new(0.0, 0.0, 0.0),
         Vec3::new(0.0, 1.0, 0.0),
         Vec3::new(-0.2, 0.0, -0.7),
     );
