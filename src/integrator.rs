@@ -6,12 +6,10 @@ use rand::Rng;
 use crate::film::ChannelSample;
 use crate::hitable::WShadingPoint;
 use crate::material::MaterialHandle;
-use crate::math::{Vec2u, Vec3};
+use crate::math::{f32x4, Vec2u, Vec3};
 use crate::ray::Ray;
 use crate::spectrum::Srgb;
 use crate::world::World;
-
-use wide::f32x4;
 
 pub trait Integrator: Send + Sync {
     #[allow(clippy::too_many_arguments)]

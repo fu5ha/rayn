@@ -1,8 +1,6 @@
 use crate::material::MaterialHandle;
-use crate::math::{OrthonormalBasis, Wat3, Wec3};
+use crate::math::{f32x4, OrthonormalBasis, Wat3, Wec3};
 use crate::ray::{Ray, WRay};
-
-use wide::f32x4;
 
 use bumpalo::collections::Vec as BumpVec;
 use bumpalo::Bump;

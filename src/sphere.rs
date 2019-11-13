@@ -1,10 +1,8 @@
 use crate::animation::WSequenced;
 use crate::hitable::{Hitable, WHit, WShadingPoint};
 use crate::material::MaterialHandle;
-use crate::math::Wec3;
+use crate::math::{f32x4, Wec3};
 use crate::ray::WRay;
-
-use wide::f32x4;
 
 pub struct Sphere<TR> {
     transform_seq: TR,
@@ -33,7 +31,7 @@ impl<TR: WSequenced<Wec3>> Hitable for Sphere<TR> {
 
         let desc_pos = descrim.cmp_gt(f32x4::from(0.0));
 
-        let miss = f32x4::from(wide::consts::MAX);
+        let miss = f32x4::from(std::f32::MAX);
 
         if desc_pos.move_mask() != 0b0000 {
             let desc_sqrt = descrim.sqrt();

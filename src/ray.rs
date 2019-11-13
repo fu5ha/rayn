@@ -16,6 +16,7 @@ macro_rules! rays {
 
         impl $n {
             #[allow(dead_code)]
+            #[inline(never)]
             pub fn point_at(&self, t: $tt) -> $t {
                 self.dir.mul_add($t::new(t, t, t), self.origin)
             }

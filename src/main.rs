@@ -20,16 +20,14 @@ use film::{ChannelKind, Film};
 use filter::BlackmanHarrisFilter;
 use hitable::HitableStore;
 use integrator::PathTracingIntegrator;
-use material::{Dielectric, MaterialStore, Metallic, Sky};
-use math::{Extent2u, Vec3, Wec3};
-use sdf::{BoxFold, KalaedescopicIfs, SphereFold, TracedSDF};
+use material::{Dielectric, MaterialStore, Sky};
+use math::{f32x4, Extent2u, Vec3};
+use sdf::{BoxFold, MandelBox, SphereFold, TracedSDF};
 use spectrum::WSrgb;
 use sphere::Sphere;
 use world::World;
 
 use std::time::Instant;
-
-use wide::f32x4;
 
 const RES: (usize, usize) = (1280, 720);
 const SAMPLES: usize = 4;
@@ -68,7 +66,7 @@ fn setup() -> (CameraHandle, World) {
     hitables.push(Sphere::new(Vec3::new(0.0, 0.0, 0.0), 300.0, sky));
 
     hitables.push(TracedSDF::new(
-        KalaedescopicIfs::new(3, BoxFold::new(1.0), SphereFold::new(0.5), 2.0),
+        MandelBox::new(3, BoxFold::new(1.0), SphereFold::new(0.5), 2.0),
         pink,
     ));
 

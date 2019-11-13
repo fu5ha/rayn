@@ -1,10 +1,9 @@
 use crate::hitable::{Hitable, WHit, WShadingPoint};
 use crate::material::MaterialHandle;
-use crate::math::Wec3;
+use crate::math::{f32x4, Wec3};
 use crate::ray::WRay;
 
 use sdfu::*;
-use wide::f32x4;
 
 const MAX_MARCHES: u32 = 100;
 
@@ -73,8 +72,8 @@ impl MandelBox {
 impl SDF<f32x4, Wec3> for MandelBox {
     fn dist(&self, mut p: Wec3) -> f32x4 {
         let offset = p;
-        let mut dr = f32x4::from(1.0);
         let one = f32x4::from(1.0);
+        let mut dr = one;
         for _ in 0..self.iterations {
             self.box_fold.box_fold(&mut p);
             self.sphere_fold.sphere_fold(&mut p, &mut dr);
@@ -127,8 +126,7 @@ impl SphereFold {
         let r2 = point.mag_sq();
         let mul = (self.rad_sq / r2)
             .max(self.rad_sq)
-            .max(f32x4::from(0.0))
-            .min(f32x4::from(1.0));
+            .clamp(f32x4::from(0.0), f32x4::from(1.0));
         *point *= mul;
         *dr *= mul;
     }

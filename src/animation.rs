@@ -1,6 +1,4 @@
-use crate::math::{Transform, Vec2, Vec3, Wec2, Wec3};
-
-use wide::f32x4;
+use crate::math::{f32x4, Transform, Vec2, Vec3, Wec2, Wec3};
 
 /// A generic object which contains a property of type T which is sequenced over time.
 pub trait Sequenced<T>: Send + Sync {

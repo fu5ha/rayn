@@ -4,13 +4,11 @@ use generic_array::{ArrayLength, GenericArray};
 
 use rand::prelude::*;
 
-use wide::f32x4;
-
 use crate::camera::CameraHandle;
 use crate::filter::{Filter, FilterImportanceSampler};
 use crate::hitable::HitStore;
 use crate::integrator::Integrator;
-use crate::math::{Aabru, Extent2u, Vec2, Vec2u, Vec3, Wec2};
+use crate::math::{f32x4, Aabru, Extent2u, Vec2, Vec2u, Vec3, Wec2};
 use crate::ray::{Ray, WRay};
 use crate::spectrum::Srgb;
 use crate::world::World;

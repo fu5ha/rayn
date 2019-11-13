@@ -1,7 +1,7 @@
 use crate::spectrum::WSrgb;
 
 use std::f32::consts::PI;
-pub use wide::f32x4;
+pub use ultraviolet::f32x4;
 
 use rand::rngs::SmallRng;
 use rand::Rng;

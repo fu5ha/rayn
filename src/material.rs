@@ -4,10 +4,10 @@ use rand::rngs::SmallRng;
 use rand::Rng;
 
 use crate::hitable::WShadingPoint;
-use crate::math::{f_schlick, f_schlick_c, OrthonormalBasis, RandomSample3d, Wec3};
+use crate::math::{f32x4, f_schlick, f_schlick_c, OrthonormalBasis, RandomSample3d, Wec3};
 use crate::spectrum::WSrgb;
 
-use wide::f32x4;
+use std::f32::consts::PI;
 
 pub trait BSDF {
     fn scatter(
@@ -118,16 +118,16 @@ impl BSDF for DielectricBSDF {
         // diffuse part
         let diffuse_sample = Wec3::cosine_weighted_in_hemisphere(rng, f32x4::from(1.0));
         let diffuse_bounce = (intersection.basis * diffuse_sample).normalized();
-        let diffuse_pdf = diffuse_sample.dot(Wec3::unit_z()) / f32x4::from(wide::consts::PI);
-        let diffuse_f = self.albedo / wide::consts::PI.into();
+        let diffuse_pdf = diffuse_sample.dot(Wec3::unit_z()) / f32x4::from(PI);
+        let diffuse_f = self.albedo / f32x4::from(PI);
 
         // spec part
         let spec_sample = Wec3::cosine_weighted_in_hemisphere(rng, self.roughness);
         let reflection = wo.reflected(norm);
         let basis = reflection.get_orthonormal_basis();
         let spec_bounce = (basis * spec_sample).normalized();
-        let spec_pdf = spec_sample.dot(Wec3::unit_z()) / f32x4::from(wide::consts::PI);
-        let spec_f = WSrgb::one() / spec_bounce.dot(norm).abs() / f32x4::from(wide::consts::PI);
+        let spec_pdf = spec_sample.dot(Wec3::unit_z()) / f32x4::from(PI);
+        let spec_f = WSrgb::one() / spec_bounce.dot(norm).abs() / f32x4::from(PI);
 
         // merge by fresnel
         let fresnel = f_schlick(cos, f32x4::from(0.04));
@@ -198,9 +198,9 @@ impl BSDF for MetallicBSDF {
         let reflection = wo.reflected(intersection.normal);
         let basis = reflection.get_orthonormal_basis();
         let bounce = basis * sample;
-        let pdf = sample.dot(Wec3::unit_z()) / f32x4::from(wide::consts::PI);
+        let pdf = sample.dot(Wec3::unit_z()) / f32x4::from(PI);
         let cos = bounce.dot(intersection.normal).abs();
-        let f = f_schlick_c(cos, self.f0) / cos / f32x4::from(wide::consts::PI);
+        let f = f_schlick_c(cos, self.f0) / cos / f32x4::from(PI);
         Some(WScatteringEvent {
             wi: bounce.normalized(),
             f,
