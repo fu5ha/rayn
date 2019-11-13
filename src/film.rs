@@ -474,7 +474,7 @@ impl<'a, N: ArrayLength<ChannelStorage> + ArrayLength<ChannelTileStorage>> Film<
                 for wray in spawned_wrays.drain(..) {
                     world.hitables.add_hits(
                         wray,
-                        f32x4::from(0.001)..f32x4::from(500.0),
+                        f32x4::from(0.0001)..f32x4::from(500.0),
                         &mut hit_store,
                     );
                 }

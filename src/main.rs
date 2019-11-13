@@ -30,7 +30,9 @@ use world::World;
 use std::time::Instant;
 
 const RES: (usize, usize) = (1280, 720);
-const SAMPLES: usize = 4;
+const SAMPLES: usize = 1;
+
+const MB_ITERS: usize = 14;
 
 fn setup() -> (CameraHandle, World) {
     let mut materials = MaterialStore::new();
@@ -66,7 +68,7 @@ fn setup() -> (CameraHandle, World) {
     hitables.push(Sphere::new(Vec3::new(0.0, 0.0, 0.0), 300.0, sky));
 
     hitables.push(TracedSDF::new(
-        MandelBox::new(3, BoxFold::new(1.0), SphereFold::new(0.5), 2.0),
+        MandelBox::new(MB_ITERS, BoxFold::new(1.0), SphereFold::new(0.5), 2.0),
         pink,
     ));
 
@@ -113,10 +115,10 @@ fn setup() -> (CameraHandle, World) {
         RES.0 as f32 / RES.1 as f32,
         60.0,
         0.025,
-        Vec3::new(5.0, 0.0, 10.0),
+        Vec3::new(10.0, 0.0, 20.0),
         Vec3::new(0.0, 0.0, 0.0),
         Vec3::new(0.0, 1.0, 0.0),
-        Vec3::new(-0.2, 0.0, -0.7),
+        Vec3::new(2.0, 0.0, 2.0),
     );
 
     let mut cameras = CameraStore::new();
@@ -157,7 +159,7 @@ fn main() {
 
     let filter = BlackmanHarrisFilter::new(2.0);
     // let filter = BoxFilter::default();
-    let integrator = PathTracingIntegrator { max_bounces: 3 };
+    let integrator = PathTracingIntegrator { max_bounces: 4 };
 
     for frame in frame_range {
         let start = Instant::now();
@@ -189,7 +191,7 @@ fn main() {
         film.save_to(
             &[ChannelKind::WorldNormal, ChannelKind::Color],
             "renders",
-            format!("frame{}", frame),
+            format!("mb_{}_iters_frame_{}", MB_ITERS, frame),
             false,
         )
         .unwrap();

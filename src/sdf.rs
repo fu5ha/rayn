@@ -5,7 +5,7 @@ use crate::ray::WRay;
 
 use sdfu::*;
 
-const MAX_MARCHES: u32 = 100;
+const MAX_MARCHES: u32 = 500;
 
 pub struct TracedSDF<S> {
     sdf: S,
@@ -43,7 +43,7 @@ impl<S: SDF<f32x4, Wec3> + Send + Sync> Hitable for TracedSDF<S> {
         let normal = normals.normal_at(point);
         (
             self.material,
-            WShadingPoint::new(hit, point, f32x4::from(0.002), normal),
+            WShadingPoint::new(hit, point, f32x4::from(0.0002), normal),
         )
     }
 }
@@ -79,10 +79,13 @@ impl SDF<f32x4, Wec3> for MandelBox {
             self.sphere_fold.sphere_fold(&mut p, &mut dr);
 
             p = p.mul_add(self.scale_vec, offset);
-            dr = dr.mul_add(self.scale.abs(), one);
+            dr = -dr.mul_add(self.scale, one);
+            // dr *= self.scale;
         }
 
-        let d = p.mag() / dr.abs();
+        let d = (p.mag() - f32x4::from(1.0)) / dr.abs();
+        // let d = p.mag() / dr.abs();
+        // let d = p.mag() / dr;
         // println!("{}", d);
         d
     }
@@ -106,6 +109,8 @@ impl BoxFold {
     }
 
     pub fn box_fold(&self, point: &mut Wec3) {
+        let c = point.clamped(self.neg_l, self.l);
+        // println!("{:?} =. {:?}", *point, c);
         *point = point.clamped(self.neg_l, self.l).mul_add(self.two, -*point)
     }
 }
