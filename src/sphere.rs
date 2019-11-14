@@ -44,9 +44,9 @@ impl<TR: WSequenced<Wec3>> Hitable for Sphere<TR> {
 
             let take_t1 = t1.cmp_lt(t2) & t1_valid;
 
-            let t = f32x4::merge(take_t1, t2, t1);
+            let t = f32x4::merge(take_t1, t1, t2);
 
-            f32x4::merge(t1_valid | t2_valid, miss, t)
+            f32x4::merge(t1_valid | t2_valid, t, miss)
         } else {
             miss
         }

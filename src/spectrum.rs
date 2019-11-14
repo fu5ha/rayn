@@ -70,8 +70,8 @@ impl Srgb {
 }
 
 impl WSrgb {
-    pub fn merge(mask: f32x4, a: Self, b: Self) -> Self {
-        Self(Wec3::merge(mask, a.0, b.0))
+    pub fn merge(mask: f32x4, tru: Self, fals: Self) -> Self {
+        Self(Wec3::merge(mask, tru.0, fals.0))
     }
 
     pub fn new_splat(r: f32, g: f32, b: f32) -> Self {

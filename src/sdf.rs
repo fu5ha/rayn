@@ -33,7 +33,7 @@ impl<S: SDF<f32x4, Wec3> + Send + Sync> Hitable for TracedSDF<S> {
             let dist = self.sdf.dist(point).abs();
             let hit_mask = dist.cmp_lt(t_range.start);
             let hit_gt_nan_mask = hit_mask | gt_nan_mask;
-            t = f32x4::merge(hit_gt_nan_mask, t + dist, t);
+            t = f32x4::merge(hit_gt_nan_mask, t, t + dist);
             if hit_gt_nan_mask.move_mask() == 0b1111 {
                 break;
             }

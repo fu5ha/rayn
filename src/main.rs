@@ -29,10 +29,10 @@ use world::World;
 
 use std::time::Instant;
 
-const RES: (usize, usize) = (1280, 720);
-const SAMPLES: usize = 8;
+const RES: (usize, usize) = (960, 540);
+const SAMPLES: usize = 1;
 
-const MB_ITERS: usize = 20;
+const MB_ITERS: usize = 12;
 
 fn setup() -> (CameraHandle, World) {
     let mut materials = MaterialStore::new();
@@ -105,12 +105,11 @@ fn main() {
 
     let (camera, world) = setup();
 
-    let mut film = Film::<U4>::new(
+    let mut film = Film::<U3>::new(
         &[
             ChannelKind::Color,
             ChannelKind::Background,
             ChannelKind::WorldNormal,
-            ChannelKind::Alpha,
         ],
         Extent2u::new(RES.0, RES.1),
     )
@@ -152,15 +151,10 @@ fn main() {
         println!("Post processing image...");
 
         film.save_to(
-            &[
-                ChannelKind::WorldNormal,
-                ChannelKind::Color,
-                ChannelKind::Background,
-                ChannelKind::Alpha,
-            ],
+            &[ChannelKind::WorldNormal, ChannelKind::Color],
             "renders",
             format!("mb_{}_iters_frame_{}", MB_ITERS, frame),
-            true,
+            false,
         )
         .unwrap();
     }

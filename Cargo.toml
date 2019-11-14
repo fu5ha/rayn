@@ -25,4 +25,5 @@ sdfu = { path = "../sdfu", features = ["ultraviolet"] }
 num_cpus = "1.10"
 generic-array = "0.13"
 bumpalo = { version = "2.6", features = ["collections"] }
-ultraviolet = { path = "../ultraviolet" }
+# ultraviolet = { path = "../ultraviolet" }
+ultraviolet = "0.3"
