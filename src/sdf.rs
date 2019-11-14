@@ -5,7 +5,7 @@ use crate::ray::WRay;
 
 use sdfu::*;
 
-const MAX_MARCHES: u32 = 500;
+const MAX_MARCHES: u32 = 1000;
 
 pub struct TracedSDF<S> {
     sdf: S,
@@ -22,15 +22,19 @@ impl<S: SDF<f32x4, Wec3> + Send + Sync> Hitable for TracedSDF<S> {
     fn hit(&self, ray: &WRay, t_range: ::std::ops::Range<f32x4>) -> f32x4 {
         let dist = self.sdf.dist(ray.origin).abs();
         let mut t = dist;
+        let nan_mask = t.cmp_nan(t);
         for _march in 0..MAX_MARCHES {
-            if t.cmp_gt(t_range.end).move_mask() == 0b1111 {
+            let gt_mask = t.cmp_gt(t_range.end);
+            let gt_nan_mask = gt_mask | nan_mask;
+            if gt_nan_mask.move_mask() == 0b1111 {
                 break;
             }
             let point = ray.point_at(t);
             let dist = self.sdf.dist(point).abs();
             let hit_mask = dist.cmp_lt(t_range.start);
-            t = f32x4::merge(hit_mask, t + dist, t);
-            if hit_mask.move_mask() == 0b1111 {
+            let hit_gt_nan_mask = hit_mask | gt_nan_mask;
+            t = f32x4::merge(hit_gt_nan_mask, t + dist, t);
+            if hit_gt_nan_mask.move_mask() == 0b1111 {
                 break;
             }
         }
@@ -38,7 +42,7 @@ impl<S: SDF<f32x4, Wec3> + Send + Sync> Hitable for TracedSDF<S> {
     }
 
     fn get_shading_info(&self, hit: WHit) -> (MaterialHandle, WShadingPoint) {
-        let normals = self.sdf.normals_fast(f32x4::from(0.0005));
+        let normals = self.sdf.normals_fast(f32x4::from(0.0001));
         let point = hit.point();
         let normal = normals.normal_at(point);
         (
@@ -79,14 +83,12 @@ impl SDF<f32x4, Wec3> for MandelBox {
             self.sphere_fold.sphere_fold(&mut p, &mut dr);
 
             p = p.mul_add(self.scale_vec, offset);
-            dr = -dr.mul_add(self.scale, one);
-            // dr *= self.scale;
+            dr = (-dr).mul_add(self.scale, one);
+            // dr = dr.mul_add(self.scale, one);
         }
 
-        let d = (p.mag() - f32x4::from(1.0)) / dr.abs();
-        // let d = p.mag() / dr.abs();
-        // let d = p.mag() / dr;
-        // println!("{}", d);
+        // let d = (p.mag() - f32x4::from(3.0)) / dr.abs() * f32x4::from(0.25);
+        let d = p.mag() / dr.abs();
         d
     }
 }
@@ -109,18 +111,41 @@ impl BoxFold {
     }
 
     pub fn box_fold(&self, point: &mut Wec3) {
-        let c = point.clamped(self.neg_l, self.l);
-        // println!("{:?} =. {:?}", *point, c);
         *point = point.clamped(self.neg_l, self.l).mul_add(self.two, -*point)
     }
 }
 
 #[derive(Clone, Copy)]
 pub struct SphereFold {
-    rad_sq: f32x4,
+    min_rad_sq: f32x4,
+    fixed_rad_sq: f32x4,
 }
 
 impl SphereFold {
+    pub fn new(min_radius: f32, fixed_radius: f32) -> Self {
+        let min_rad_sq = (min_radius * min_radius).into();
+        let fixed_rad_sq = (fixed_radius * fixed_radius).into();
+        Self {
+            min_rad_sq,
+            fixed_rad_sq,
+        }
+    }
+
+    pub fn sphere_fold(&self, point: &mut Wec3, dr: &mut f32x4) {
+        let r2 = point.mag_sq();
+
+        let mul = (self.fixed_rad_sq / self.min_rad_sq.max(r2)).max(f32x4::from(1.0));
+        *point *= mul;
+        *dr *= mul;
+    }
+}
+
+#[derive(Clone, Copy)]
+pub struct BrokenSphereFold {
+    rad_sq: f32x4,
+}
+
+impl BrokenSphereFold {
     pub fn new(radius: f32) -> Self {
         Self {
             rad_sq: radius.into(),

@@ -65,16 +65,7 @@ srgbs!(WSrgb => Wec3, f32x4, Srgb => Vec3, f32);
 
 impl Srgb {
     pub fn is_nan(&self) -> bool {
-        std::iter::once(self.x.classify())
-            .chain(std::iter::once(self.y.classify()))
-            .chain(std::iter::once(self.z.classify()))
-            .any(|class| {
-                if let std::num::FpCategory::Nan = class {
-                    true
-                } else {
-                    false
-                }
-            })
+        self.x.is_nan() || self.y.is_nan() || self.z.is_nan()
     }
 }
 

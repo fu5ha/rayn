@@ -69,6 +69,57 @@ impl<T, I: Into<T> + Copy> WShadingParamGenerator<T> for I {
 }
 
 #[derive(Clone, Copy)]
+pub struct LambertianBSDF {
+    albedo: WSrgb,
+}
+
+pub struct Lambertian<AG> {
+    pub albedo_gen: AG,
+}
+
+impl<AG> Lambertian<AG> {
+    pub fn new(albedo_gen: AG) -> Self {
+        Self { albedo_gen }
+    }
+}
+
+impl<AG> Material for Lambertian<AG>
+where
+    AG: WShadingParamGenerator<WSrgb> + Send + Sync,
+{
+    fn get_bsdf_at<'bump>(
+        &self,
+        intersection: &WShadingPoint,
+        bump: &'bump Bump,
+    ) -> &'bump mut dyn BSDF {
+        bump.alloc_with(|| LambertianBSDF {
+            albedo: self.albedo_gen.gen(intersection),
+        })
+    }
+}
+
+impl BSDF for LambertianBSDF {
+    fn scatter(
+        &self,
+        _wo: Wec3,
+        intersection: &WShadingPoint,
+        rng: &mut SmallRng,
+    ) -> Option<WScatteringEvent> {
+        let diffuse_sample = Wec3::cosine_weighted_in_hemisphere(rng, f32x4::from(1.0));
+        let diffuse_bounce = (intersection.basis * diffuse_sample).normalized();
+        let diffuse_pdf = diffuse_sample.dot(Wec3::unit_z()) / f32x4::from(PI);
+        let diffuse_f = self.albedo / f32x4::from(PI);
+
+        Some(WScatteringEvent {
+            wi: diffuse_bounce,
+            f: diffuse_f,
+            pdf: diffuse_pdf,
+            specular: f32x4::from(0.0),
+        })
+    }
+}
+
+#[derive(Clone, Copy)]
 pub struct DielectricBSDF {
     albedo: WSrgb,
     roughness: f32x4,
@@ -132,12 +183,7 @@ impl BSDF for DielectricBSDF {
         // merge by fresnel
         let fresnel = f_schlick(cos, f32x4::from(0.04));
 
-        let fresnel_sample = f32x4::new(
-            rng.gen::<f32>(),
-            rng.gen::<f32>(),
-            rng.gen::<f32>(),
-            rng.gen::<f32>(),
-        );
+        let fresnel_sample = f32x4::from(rng.gen::<[f32; 4]>());
 
         let fresnel_mask = fresnel_sample.cmp_lt(fresnel);
 
@@ -308,11 +354,11 @@ impl BSDF for SkyBSDF {
 
     fn le(&self, wo: Wec3, _intersection: &WShadingPoint) -> WSrgb {
         let dir = -wo;
-        let t = f32x4::from(0.5) * (dir.y + f32x4::from(1.0));
+        let t = f32x4::from(0.5) * (dir.dot(Wec3::unit_y()) + f32x4::from(1.0));
 
-        let top = WSrgb::one();
-        let mid = WSrgb::new(f32x4::from(0.5), f32x4::from(0.7), f32x4::from(1.0));
-        top * (f32x4::from(1.0) - t) + mid * t
+        let bottom = WSrgb::new_splat(0.05, 0.025, 0.1);
+        let top = WSrgb::new_splat(1.2, 1.15, 1.8);
+        bottom * (f32x4::from(1.0) - t) + top * t
     }
 }
 

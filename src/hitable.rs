@@ -38,6 +38,7 @@ impl WShadingPoint {
             dir,
             self.ray.time,
             self.ray.tile_coord,
+            self.ray.valid,
         )
     }
 }
@@ -64,7 +65,7 @@ impl WHit {
 impl From<[Hit; 4]> for WHit {
     fn from(hits: [Hit; 4]) -> Self {
         let ray = WRay::from([hits[0].ray, hits[1].ray, hits[2].ray, hits[3].ray]);
-        let t = f32x4::new(hits[0].t, hits[1].t, hits[2].t, hits[3].t);
+        let t = f32x4::from([hits[0].t, hits[1].t, hits[2].t, hits[3].t]);
         Self { ray, t }
     }
 }
@@ -155,7 +156,7 @@ impl ::std::ops::Deref for HitableStore {
 impl HitableStore {
     pub fn add_hits(
         &self,
-        rays: WRay,
+        ray: WRay,
         t_ranges: ::std::ops::Range<f32x4>,
         hit_store: &mut HitStore,
     ) {
@@ -164,7 +165,7 @@ impl HitableStore {
             |acc, (hitable_id, hitable)| {
                 let (mut closest_ids, mut closest) = acc;
 
-                let t = hitable.hit(&rays, t_ranges.start..closest);
+                let t = hitable.hit(&ray, t_ranges.start..closest);
 
                 for ((t, closest), closest_id) in t
                     .as_ref()
@@ -182,11 +183,11 @@ impl HitableStore {
             },
         );
 
-        let rays: [Ray; 4] = rays.into();
+        let rays: [Ray; 4] = ray.into();
         let dists = dists.as_ref();
 
         for ((id, ray), t) in ids.iter().zip(rays.iter()).zip(dists.iter()) {
-            if *id < std::usize::MAX {
+            if *id < std::usize::MAX && ray.valid {
                 unsafe {
                     hit_store.add_hit(*id, Hit { ray: *ray, t: *t });
                 }

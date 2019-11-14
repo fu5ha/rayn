@@ -54,6 +54,7 @@ impl<OS: WSequenced<Wec3>> Camera for PinholeCamera<OS> {
             (self.lower_left + self.full_size * Wec3::from(uv)).normalized(),
             time,
             [tile_coord, tile_coord, tile_coord, tile_coord],
+            [true, true, true, true],
         )
     }
 }
@@ -120,6 +121,7 @@ where
             (lower_left + horiz + verti - origin).normalized(),
             time,
             [tile_coord, tile_coord, tile_coord, tile_coord],
+            [true, true, true, true],
         )
     }
 }

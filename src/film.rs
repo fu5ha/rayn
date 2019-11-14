@@ -448,12 +448,12 @@ impl<'a, N: ArrayLength<ChannelStorage> + ArrayLength<ChannelTileStorage>> Film<
                             sample_uv(x, y, tile.screen_to_ndc_size, &fis, &mut rng),
                         ]);
 
-                        let times = f32x4::new(
+                        let times = f32x4::from([
                             rng.gen_range(time_range.start, time_range.end),
                             rng.gen_range(time_range.start, time_range.end),
                             rng.gen_range(time_range.start, time_range.end),
                             rng.gen_range(time_range.start, time_range.end),
-                        );
+                        ]);
 
                         let rays = camera.get_rays(tile_coord, ndcs, times, &mut rng);
 
@@ -499,18 +499,21 @@ impl<'a, N: ArrayLength<ChannelStorage> + ArrayLength<ChannelTileStorage>> Film<
                 }
 
                 while spawned_rays.len() % 4 != 0 {
-                    spawned_rays.push(Ray::new(Vec3::zero(), Vec3::zero(), 0.0, Vec2u::zero()));
+                    spawned_rays.push(Ray::new_invalid());
                 }
+
                 for rays in spawned_rays[0..].chunks_exact(4) {
                     // Safe because we just ensured that it has the correct length
-                    spawned_wrays.push(WRay::from(unsafe {
+                    let wray = WRay::from(unsafe {
                         [
                             *rays.get_unchecked(0),
                             *rays.get_unchecked(1),
                             *rays.get_unchecked(2),
                             *rays.get_unchecked(3),
                         ]
-                    }));
+                    });
+
+                    spawned_wrays.push(wray);
                 }
                 spawned_rays.clear();
             }

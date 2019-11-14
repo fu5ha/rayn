@@ -39,9 +39,9 @@ impl Ray {
 
     pub fn new_invalid() -> Self {
         Self {
-            time: 0.0,
-            origin: Vec3::zero(),
-            dir: Vec3::zero(),
+            time: std::f32::NAN,
+            origin: Vec3::broadcast(std::f32::NAN),
+            dir: Vec3::broadcast(std::f32::NAN),
             radiance: Srgb::zero(),
             throughput: Srgb::zero(),
             tile_coord: Vec2u::zero(),
@@ -51,7 +51,13 @@ impl Ray {
 }
 
 impl WRay {
-    pub fn new(origin: Wec3, dir: Wec3, time: f32x4, tile_coord: [Vec2u; 4]) -> Self {
+    pub fn new(
+        origin: Wec3,
+        dir: Wec3,
+        time: f32x4,
+        tile_coord: [Vec2u; 4],
+        valid: [bool; 4],
+    ) -> Self {
         Self {
             time,
             origin,
@@ -59,8 +65,27 @@ impl WRay {
             radiance: WSrgb::zero(),
             throughput: WSrgb::one(),
             tile_coord,
-            valid: [true, true, true, true],
+            valid,
         }
+    }
+
+    pub fn is_nan(&self) -> f32x4 {
+        self.time.cmp_nan(self.time)
+            | self.origin.x.cmp_nan(self.origin.x)
+            | self.origin.y.cmp_nan(self.origin.y)
+            | self.origin.z.cmp_nan(self.origin.z)
+            | self.dir.x.cmp_nan(self.dir.x)
+            | self.dir.y.cmp_nan(self.dir.y)
+            | self.dir.z.cmp_nan(self.dir.z)
+    }
+
+    pub fn is_nan_and_valid(&self) -> bool {
+        let raynan = self.is_nan().move_mask();
+        raynan != 0
+            && !((raynan & 0b1000 == 0b1000) == self.valid[0])
+            && !((raynan & 0b0100 == 0b0100) == self.valid[1])
+            && !((raynan & 0b0010 == 0b0010) == self.valid[2])
+            && !((raynan & 0b0001 == 0b0001) == self.valid[3])
     }
 }
 
@@ -69,7 +94,7 @@ rays!(Ray => Vec3, Srgb, f32, Vec2u, bool, WRay => Wec3, WSrgb, f32x4, [Vec2u; 4
 impl From<[Ray; 4]> for WRay {
     fn from(rays: [Ray; 4]) -> Self {
         Self {
-            time: f32x4::new(rays[0].time, rays[1].time, rays[2].time, rays[3].time),
+            time: f32x4::from([rays[0].time, rays[1].time, rays[2].time, rays[3].time]),
             origin: Wec3::from([
                 rays[0].origin,
                 rays[1].origin,

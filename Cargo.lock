@@ -521,7 +521,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 name = "ultraviolet"
 version = "0.2.1"
 dependencies = [
- "wide 0.2.7-alpha.0",
+ "wide 0.2.6 (registry+https://github.com/rust-lang/crates.io-index)",
 ]
 
 [[package]]
@@ -548,7 +548,8 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 
 [[package]]
 name = "wide"
-version = "0.2.7-alpha.0"
+version = "0.2.6"
+source = "registry+https://github.com/rust-lang/crates.io-index"
 dependencies = [
  "bytemuck 0.1.2 (registry+https://github.com/rust-lang/crates.io-index)",
  "cfg-if 0.1.10 (registry+https://github.com/rust-lang/crates.io-index)",
@@ -620,3 +621,4 @@ dependencies = [
 "checksum unicode-xid 0.1.0 (registry+https://github.com/rust-lang/crates.io-index)" = "fc72304796d0818e357ead4e000d19c9c174ab23dc11093ac919054d20a6a7fc"
 "checksum vek 0.9.10 (registry+https://github.com/rust-lang/crates.io-index)" = "2bb887880c4eb92359ae9abea055ddf60bfade4603bf9534f3c62c2707cb306b"
 "checksum wasi 0.7.0 (registry+https://github.com/rust-lang/crates.io-index)" = "b89c3ce4ce14bdc6fb6beaf9ec7928ca331de5df7e5ea278375642a2f478570d"
+"checksum wide 0.2.6 (registry+https://github.com/rust-lang/crates.io-index)" = "c426c70fc3b1fb294b459c6baf46f62035790bbb7f012a85a3a4e717485336ef"

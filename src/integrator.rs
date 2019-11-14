@@ -75,18 +75,19 @@ impl Integrator for PathTracingIntegrator {
             if depth == 0 {
                 let normals: [Vec3; 4] = intersection.normal.into();
                 for (ray, normal) in new_rays.iter().zip(normals.iter()) {
-                    output_samples.push((ray.tile_coord, ChannelSample::Alpha(1.0)));
-                    output_samples.push((ray.tile_coord, ChannelSample::WorldNormal(*normal)));
+                    if ray.valid {
+                        output_samples.push((ray.tile_coord, ChannelSample::Alpha(1.0)));
+                        output_samples.push((ray.tile_coord, ChannelSample::WorldNormal(*normal)));
+                    }
                 }
             }
 
-            for (((ray, new_throughput), roulette_factor), valid) in new_rays
+            for ((ray, new_throughput), roulette_factor) in new_rays
                 .iter_mut()
                 .zip(throughputs.iter())
                 .zip(roulette_factor.as_ref().iter())
-                .zip(intersection.ray.valid.iter())
             {
-                if *valid {
+                if ray.valid {
                     if depth >= self.max_bounces || rng.gen::<f32>() < *roulette_factor {
                         output_samples.push((ray.tile_coord, ChannelSample::Color(ray.radiance)));
                     } else {
