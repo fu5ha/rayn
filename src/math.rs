@@ -31,9 +31,9 @@ impl OrthonormalBasis<Wat3> for Wec3 {
     fn get_orthonormal_basis(&self) -> Wat3 {
         let nor = *self;
         let ks = nor.z.signum();
-        let ka = f32x4::from(1.0) / (f32x4::from(1.0) + nor.z.abs());
+        let ka = f32x4::ONE / (f32x4::ONE + nor.z.abs());
         let kb = -ks * nor.x * nor.y * ka;
-        let uu = Wec3::new(f32x4::from(1.0) - nor.x * nor.x * ka, ks * kb, -ks * nor.x);
+        let uu = Wec3::new(f32x4::ONE - nor.x * nor.x * ka, ks * kb, -ks * nor.x);
         let vv = Wec3::new(kb, ks - nor.y * nor.y * ka * ks, -nor.y);
         Wat3::new(uu, vv, nor)
     }
@@ -49,7 +49,8 @@ impl RandomSample2d for Wec2 {
         let rho = f32x4::from(rho).sqrt();
         let theta = rng.gen::<[f32; 4]>();
         let theta = f32x4::from(theta) * f32x4::from(2f32 * PI);
-        Wec2::new(rho * theta.cos(), rho * theta.sin())
+        let (sin, cos) = theta.sin_cos();
+        Wec2::new(rho * cos, rho * sin)
     }
 }
 
@@ -64,9 +65,10 @@ impl RandomSample3d<f32x4> for Wec3 {
         let theta = rng.gen::<[f32; 4]>();
         let theta = f32x4::from(theta) * f32x4::from(2f32 * PI);
         let phi = rng.gen::<[f32; 4]>();
-        let phi = f32x4::from(phi) * f32x4::from(2.0) - f32x4::from(1.0);
-        let ophisq = (f32x4::from(1.0) - phi * phi).sqrt();
-        Wec3::new(ophisq * theta.cos(), ophisq * theta.sin(), phi)
+        let phi = f32x4::from(phi) * f32x4::from(2.0) - f32x4::ONE;
+        let ophisq = (f32x4::ONE - phi * phi).sqrt();
+        let (sin, cos) = theta.sin_cos();
+        Wec3::new(ophisq * cos, ophisq * sin, phi)
     }
 
     fn rand_on_unit_sphere(rng: &mut SmallRng) -> Self {
@@ -75,28 +77,28 @@ impl RandomSample3d<f32x4> for Wec3 {
 
     fn cosine_weighted_in_hemisphere(rng: &mut SmallRng, constriction: f32x4) -> Self {
         let xy = Wec2::rand_in_unit_disk(rng) * constriction;
-        let z = (f32x4::from(1.0) - xy.mag_sq()).sqrt();
+        let z = (f32x4::ONE - xy.mag_sq()).sqrt();
         Wec3::new(xy.x, xy.y, z)
     }
 }
 
 #[allow(dead_code)]
 pub fn f0_from_ior(ior: f32x4) -> f32x4 {
-    let f0 = (f32x4::from(1.0) - ior) / (f32x4::from(1.0) + ior);
+    let f0 = (f32x4::ONE - ior) / (f32x4::ONE + ior);
     f0 * f0
 }
 
 pub fn f_schlick(cos: f32x4, f0: f32x4) -> f32x4 {
-    f0 + (f32x4::from(1.0) - f0) * (f32x4::from(1.0) - cos).powi([5, 5, 5, 5])
+    f0 + (f32x4::ONE - f0) * (f32x4::ONE - cos).powi([5, 5, 5, 5])
 }
 
 pub fn f_schlick_c(cos: f32x4, f0: WSrgb) -> WSrgb {
-    f0 + (WSrgb::one() - f0) * (f32x4::from(1.0) - cos).powi([5, 5, 5, 5])
+    f0 + (WSrgb::one() - f0) * (f32x4::ONE - cos).powi([5, 5, 5, 5])
 }
 
 #[allow(dead_code)]
 pub fn saturate(v: f32x4) -> f32x4 {
-    v.min(f32x4::from(1.0)).max(f32x4::from(0.0))
+    v.min(f32x4::ONE).max(f32x4::ZERO)
 }
 
 pub struct CDF {

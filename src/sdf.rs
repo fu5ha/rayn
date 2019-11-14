@@ -76,7 +76,7 @@ impl MandelBox {
 impl SDF<f32x4, Wec3> for MandelBox {
     fn dist(&self, mut p: Wec3) -> f32x4 {
         let offset = p;
-        let one = f32x4::from(1.0);
+        let one = f32x4::ONE;
         let mut dr = one;
         for _ in 0..self.iterations {
             self.box_fold.box_fold(&mut p);
@@ -134,7 +134,7 @@ impl SphereFold {
     pub fn sphere_fold(&self, point: &mut Wec3, dr: &mut f32x4) {
         let r2 = point.mag_sq();
 
-        let mul = (self.fixed_rad_sq / self.min_rad_sq.max(r2)).max(f32x4::from(1.0));
+        let mul = (self.fixed_rad_sq / self.min_rad_sq.max(r2)).max(f32x4::ONE);
         *point *= mul;
         *dr *= mul;
     }
@@ -156,7 +156,7 @@ impl BrokenSphereFold {
         let r2 = point.mag_sq();
         let mul = (self.rad_sq / r2)
             .max(self.rad_sq)
-            .clamp(f32x4::from(0.0), f32x4::from(1.0));
+            .clamp(f32x4::ZERO, f32x4::ONE);
         *point *= mul;
         *dr *= mul;
     }

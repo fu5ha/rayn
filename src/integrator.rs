@@ -58,15 +58,14 @@ impl Integrator for PathTracingIntegrator {
             let mut new_throughput = intersection.ray.throughput * se.f / se.pdf * ndl;
 
             let roulette_factor = if depth > 2 {
-                let roulette_factor = (f32x4::from(1.0)
-                    - intersection.ray.throughput.max_channel())
-                .max(f32x4::from(0.05));
+                let roulette_factor =
+                    (f32x4::ONE - intersection.ray.throughput.max_channel()).max(f32x4::from(0.05));
 
-                new_throughput /= f32x4::from(1.0) - roulette_factor;
+                new_throughput /= f32x4::ONE - roulette_factor;
 
                 roulette_factor
             } else {
-                f32x4::from(0.0)
+                f32x4::ZERO
             };
 
             let mut new_rays: [Ray; 4] = intersection.create_rays(se.wi).into();

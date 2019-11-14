@@ -105,7 +105,7 @@ impl BSDF for LambertianBSDF {
         intersection: &WShadingPoint,
         rng: &mut SmallRng,
     ) -> Option<WScatteringEvent> {
-        let diffuse_sample = Wec3::cosine_weighted_in_hemisphere(rng, f32x4::from(1.0));
+        let diffuse_sample = Wec3::cosine_weighted_in_hemisphere(rng, f32x4::ONE);
         let diffuse_bounce = (intersection.basis * diffuse_sample).normalized();
         let diffuse_pdf = diffuse_sample.dot(Wec3::unit_z()) / f32x4::from(PI);
         let diffuse_f = self.albedo / f32x4::from(PI);
@@ -114,7 +114,7 @@ impl BSDF for LambertianBSDF {
             wi: diffuse_bounce,
             f: diffuse_f,
             pdf: diffuse_pdf,
-            specular: f32x4::from(0.0),
+            specular: f32x4::ZERO,
         })
     }
 }
@@ -167,7 +167,7 @@ impl BSDF for DielectricBSDF {
         let cos = norm.dot(-wo).abs();
 
         // diffuse part
-        let diffuse_sample = Wec3::cosine_weighted_in_hemisphere(rng, f32x4::from(1.0));
+        let diffuse_sample = Wec3::cosine_weighted_in_hemisphere(rng, f32x4::ONE);
         let diffuse_bounce = (intersection.basis * diffuse_sample).normalized();
         let diffuse_pdf = diffuse_sample.dot(Wec3::unit_z()) / f32x4::from(PI);
         let diffuse_f = self.albedo / f32x4::from(PI);
@@ -191,7 +191,7 @@ impl BSDF for DielectricBSDF {
             wi: Wec3::merge(fresnel_mask, spec_bounce, diffuse_bounce),
             f: WSrgb::merge(fresnel_mask, spec_f, diffuse_f),
             pdf: f32x4::merge(fresnel_mask, spec_pdf, diffuse_pdf),
-            specular: f32x4::merge(fresnel_mask, f32x4::from(1.0), f32x4::from(0.0)),
+            specular: f32x4::merge(fresnel_mask, f32x4::ONE, f32x4::ZERO),
         })
     }
 }
@@ -251,7 +251,7 @@ impl BSDF for MetallicBSDF {
             wi: bounce.normalized(),
             f,
             pdf,
-            specular: f32x4::from(1.0),
+            specular: f32x4::ONE,
         })
     }
 }
@@ -354,11 +354,11 @@ impl BSDF for SkyBSDF {
 
     fn le(&self, wo: Wec3, _intersection: &WShadingPoint) -> WSrgb {
         let dir = -wo;
-        let t = f32x4::from(0.5) * (dir.dot(Wec3::unit_y()) + f32x4::from(1.0));
+        let t = f32x4::from(0.5) * (dir.dot(Wec3::unit_y()) + f32x4::ONE);
 
         let bottom = WSrgb::new_splat(0.05, 0.025, 0.1);
         let top = WSrgb::new_splat(1.2, 1.15, 1.8);
-        bottom * (f32x4::from(1.0) - t) + top * t
+        bottom * (f32x4::ONE - t) + top * t
     }
 }
 

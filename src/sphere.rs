@@ -29,7 +29,7 @@ impl<TR: WSequenced<Wec3>> Hitable for Sphere<TR> {
         let c = oc.mag_sq() - f32x4::from(self.radius * self.radius);
         let descrim = b * b - f32x4::from(4.0) * a * c;
 
-        let desc_pos = descrim.cmp_gt(f32x4::from(0.0));
+        let desc_pos = descrim.cmp_gt(f32x4::ZERO);
 
         let miss = f32x4::from(std::f32::MAX);
 
@@ -58,7 +58,7 @@ impl<TR: WSequenced<Wec3>> Hitable for Sphere<TR> {
         let normal = (point - origin).normalized();
         (
             self.material,
-            WShadingPoint::new(hit, point, f32x4::from(0.0), normal),
+            WShadingPoint::new(hit, point, f32x4::ZERO, normal),
         )
     }
 }
