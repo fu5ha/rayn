@@ -417,7 +417,7 @@ dependencies = [
  "rayon 1.2.0 (registry+https://github.com/rust-lang/crates.io-index)",
  "sdfu 0.1.2",
  "splines 2.2.0 (registry+https://github.com/rust-lang/crates.io-index)",
- "ultraviolet 0.2.1",
+ "ultraviolet 0.3.0",
  "vek 0.9.10 (registry+https://github.com/rust-lang/crates.io-index)",
 ]
 
@@ -465,7 +465,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 name = "sdfu"
 version = "0.1.2"
 dependencies = [
- "ultraviolet 0.2.1",
+ "ultraviolet 0.3.0",
 ]
 
 [[package]]
@@ -519,7 +519,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 
 [[package]]
 name = "ultraviolet"
-version = "0.2.1"
+version = "0.3.0"
 dependencies = [
  "wide 0.2.6 (registry+https://github.com/rust-lang/crates.io-index)",
 ]
