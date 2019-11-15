@@ -17,7 +17,7 @@ use std::collections::HashMap;
 use std::ops::Range;
 use std::sync::{
     atomic::{AtomicUsize, Ordering},
-    Mutex,
+    Arc, Mutex,
 };
 
 macro_rules! declare_channels {
@@ -527,14 +527,17 @@ impl<'a, N: ArrayLength<ChannelStorage> + ArrayLength<ChannelTileStorage>> Film<
     {
         let num_tiles = tiles.len();
 
+        let pb = Arc::new(Mutex::new(pbr::ProgressBar::new(num_tiles as u64)));
+
         {
             let this = &*self;
             rayon::scope_fifo(|scope| {
-                for (idx, mut tile) in tiles.into_iter().enumerate() {
+                for mut tile in tiles.into_iter() {
+                    let pb = pb.clone();
                     scope.spawn_fifo(move |_| {
                         integrate_tile(&mut tile);
 
-                        this.tile_finished(tile, num_tiles, idx, samples)
+                        this.tile_finished(tile, samples, pb)
                     })
                 }
             });
@@ -548,7 +551,12 @@ impl<'a, N: ArrayLength<ChannelStorage> + ArrayLength<ChannelTileStorage>> Film<
         self.progressive_epoch += 1;
     }
 
-    fn tile_finished(&self, tile: Tile<N>, num_tiles: usize, tile_idx: usize, samples: usize) {
+    fn tile_finished(
+        &self,
+        tile: Tile<N>,
+        samples: usize,
+        pb: Arc<Mutex<pbr::ProgressBar<std::io::Stdout>>>,
+    ) {
         if self.progressive_epoch != tile.epoch {
             panic!(
                 "Epoch mismatch! Expected: {}, got: {}",
@@ -556,16 +564,8 @@ impl<'a, N: ArrayLength<ChannelStorage> + ArrayLength<ChannelTileStorage>> Film<
             );
         }
 
-        let tile_percent = 1.0 / num_tiles as f32 * 100.0;
-        let tile_percent_target = 5.0;
-        let tile_divisor = (tile_percent_target / tile_percent).round() as usize;
-
-        if tile_idx % tile_divisor == 0 {
-            println!(
-                "{}% finished...",
-                (tile_idx as f32 * tile_percent).round() as u32
-            );
-        }
+        let mut pb = pb.lock().unwrap();
+        pb.inc();
 
         let mut channels = self.channels.lock().unwrap();
 
