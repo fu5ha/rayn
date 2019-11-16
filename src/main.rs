@@ -20,8 +20,8 @@ use film::{ChannelKind, Film};
 use filter::BlackmanHarrisFilter;
 use hitable::HitableStore;
 use integrator::PathTracingIntegrator;
-use material::{Dielectric, Lambertian, MaterialStore, Sky};
-use math::{f32x4, Extent2u, Vec3, Wec3};
+use material::{Dielectric, Emissive, MaterialStore, Sky};
+use math::{f32x4, Extent2u, Vec3};
 use sdf::{BoxFold, MandelBox, SphereFold, TracedSDF};
 use spectrum::WSrgb;
 use sphere::Sphere;
@@ -30,9 +30,9 @@ use world::World;
 use std::time::Instant;
 
 const RES: (usize, usize) = (960, 540);
-const SAMPLES: usize = 1;
+const SAMPLES: usize = 16;
 
-const MB_ITERS: usize = 12;
+const MB_ITERS: usize = 20;
 
 fn setup() -> (CameraHandle, World) {
     let mut materials = MaterialStore::new();
@@ -42,6 +42,8 @@ fn setup() -> (CameraHandle, World) {
         f32x4::from(0.1),
     ));
 
+    let white_emissive = materials.add_material(Emissive::new(WSrgb::new_splat(2.0, 3.0, 4.5)));
+
     let sky = materials.add_material(Sky {});
 
     let mut hitables = HitableStore::new();
@@ -49,18 +51,24 @@ fn setup() -> (CameraHandle, World) {
     hitables.push(Sphere::new(Vec3::new(0.0, 0.0, 0.0), 300.0, sky));
 
     hitables.push(TracedSDF::new(
-        MandelBox::new(MB_ITERS, BoxFold::new(1.0), SphereFold::new(0.5, 1.0), 3.0),
+        MandelBox::new(MB_ITERS, BoxFold::new(1.0), SphereFold::new(0.5, 1.0), 2.0),
         pink,
+    ));
+
+    hitables.push(Sphere::new(
+        Vec3::new(3.25, 1.75, 5.25),
+        0.1,
+        white_emissive,
     ));
 
     let camera = ThinLensCamera::new(
         RES.0 as f32 / RES.1 as f32,
         60.0,
-        0.001,
-        Vec3::new(3.07, 0.25, 4.05),
-        Vec3::new(2.5, 2.0, 3.0),
+        0.0001,
+        Vec3::new(3.5, 1.875, 6.05),
+        Vec3::new(0.0, 0.875, 0.9),
         Vec3::new(0.0, 1.0, 0.0),
-        Vec3::new(2.725, 0.275, 4.0),
+        Vec3::new(3.0, 1.875, 6.0),
     );
 
     // let camera = ThinLensCamera::new(

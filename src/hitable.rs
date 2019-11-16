@@ -33,13 +33,10 @@ impl WShadingPoint {
     }
 
     pub fn create_rays(&self, dir: Wec3) -> WRay {
-        WRay::new(
-            self.point + self.normal * self.normal.dot(dir).signum() * self.offset_by,
-            dir,
-            self.ray.time,
-            self.ray.tile_coord,
-            self.ray.valid,
-        )
+        let mut ray = self.ray;
+        ray.origin = self.point + self.normal * self.normal.dot(dir).signum() * self.offset_by;
+        ray.dir = dir;
+        ray
     }
 }
 

@@ -362,6 +362,34 @@ impl BSDF for SkyBSDF {
     }
 }
 
+pub struct Emissive<EG> {
+    pub emission_gen: EG,
+}
+
+impl<EG> Emissive<EG> {
+    pub fn new(emission_gen: EG) -> Self {
+        Self { emission_gen }
+    }
+}
+
+impl<EG> Material for Emissive<EG>
+where
+    EG: WShadingParamGenerator<WSrgb> + Send + Sync,
+{
+    fn get_bsdf_at<'bump>(
+        &self,
+        intersection: &WShadingPoint,
+        bump: &'bump Bump,
+    ) -> &'bump mut dyn BSDF {
+        bump.alloc_with(|| EmissiveBSDF {
+            emission: self.emission_gen.gen(intersection),
+            inner: LambertianBSDF {
+                albedo: WSrgb::new_splat(0.5, 0.5, 0.5),
+            },
+        })
+    }
+}
+
 #[derive(Clone, Copy)]
 pub struct EmissiveBSDF<I> {
     inner: I,
