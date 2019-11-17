@@ -5,8 +5,10 @@ This is a CPU-based path tracing renderer focused on rendering SDFs, specificall
 
 # Features
 
-* Architected to use 128-wide SIMD to full extent, and in the future perhaps 256 or 512 as well.
+* Architected to use 128-wide SIMD to full extent with the help of [`ultraviolet`](https://github.com/termhn/ultraviolet), and in the future perhaps 256 or 512 as well.
 * Physical light transport algorithm
+* Depth of field
+* Arbitrary animation and time-sampled motion blur
 * Importance sampling (soon multiple importance sampling)
 * Multiple-bounce indirect lighting/global illumination
 * Signed distance field rendering through leveraging [`sdfu`](https://github.com/termhn/sdfu/)
