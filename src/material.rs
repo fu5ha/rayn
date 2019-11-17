@@ -73,11 +73,13 @@ pub struct LambertianBSDF {
     albedo: WSrgb,
 }
 
+#[allow(dead_code)]
 pub struct Lambertian<AG> {
     pub albedo_gen: AG,
 }
 
 impl<AG> Lambertian<AG> {
+    #[allow(dead_code)]
     pub fn new(albedo_gen: AG) -> Self {
         Self { albedo_gen }
     }
@@ -196,12 +198,14 @@ impl BSDF for DielectricBSDF {
     }
 }
 
+#[allow(dead_code)]
 pub struct Metallic<FG, RG> {
     pub f0_gen: FG,
     pub roughness_gen: RG,
 }
 
 impl<FG, RG> Metallic<FG, RG> {
+    #[allow(dead_code)]
     pub fn new(f0_gen: FG, roughness_gen: RG) -> Self {
         Self {
             f0_gen,

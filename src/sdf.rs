@@ -142,16 +142,19 @@ impl SphereFold {
 
 #[derive(Clone, Copy)]
 pub struct BrokenSphereFold {
+    #[allow(dead_code)]
     rad_sq: f32x4,
 }
 
 impl BrokenSphereFold {
+    #[allow(dead_code)]
     pub fn new(radius: f32) -> Self {
         Self {
             rad_sq: radius.into(),
         }
     }
 
+    #[allow(dead_code)]
     pub fn sphere_fold(&self, point: &mut Wec3, dr: &mut f32x4) {
         let r2 = point.mag_sq();
         let mul = (self.rad_sq / r2)

@@ -25,6 +25,7 @@ macro_rules! rays {
 }
 
 impl Ray {
+    #[allow(dead_code)]
     pub fn new(origin: Vec3, dir: Vec3, time: f32, tile_coord: Vec2u) -> Self {
         Self {
             time,
@@ -69,6 +70,7 @@ impl WRay {
         }
     }
 
+    #[allow(dead_code)]
     pub fn is_nan(&self) -> f32x4 {
         self.time.cmp_nan(self.time)
             | self.origin.x.cmp_nan(self.origin.x)
@@ -79,6 +81,7 @@ impl WRay {
             | self.dir.z.cmp_nan(self.dir.z)
     }
 
+    #[allow(dead_code)]
     pub fn is_nan_and_valid(&self) -> bool {
         let raynan = self.is_nan().move_mask();
         raynan != 0

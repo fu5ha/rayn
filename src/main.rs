@@ -1,5 +1,4 @@
 use generic_array::typenum::*;
-use sdfu::SDF;
 
 mod animation;
 mod camera;
@@ -29,10 +28,10 @@ use world::World;
 
 use std::time::Instant;
 
-const RES: (usize, usize) = (960, 540);
-const SAMPLES: usize = 16;
+const RES: (usize, usize) = (1920, 1080);
+const SAMPLES: usize = 4;
 
-const MB_ITERS: usize = 20;
+const MB_ITERS: usize = 14;
 
 fn setup() -> (CameraHandle, World) {
     let mut materials = MaterialStore::new();
@@ -42,7 +41,7 @@ fn setup() -> (CameraHandle, World) {
         f32x4::from(0.1),
     ));
 
-    let white_emissive = materials.add_material(Emissive::new(WSrgb::new_splat(2.0, 3.0, 4.5)));
+    let _white_emissive = materials.add_material(Emissive::new(WSrgb::new_splat(2.0, 3.0, 4.5)));
 
     let sky = materials.add_material(Sky {});
 
@@ -55,40 +54,42 @@ fn setup() -> (CameraHandle, World) {
         pink,
     ));
 
-    hitables.push(Sphere::new(
-        Vec3::new(3.25, 1.75, 5.25),
-        0.1,
-        white_emissive,
-    ));
+    // hitables.push(Sphere::new(
+    //     Vec3::new(3.25, 1.75, 5.25),
+    //     0.1,
+    //     white_emissive,
+    // ));
 
     let camera = ThinLensCamera::new(
         RES.0 as f32 / RES.1 as f32,
         60.0,
-        0.0001,
-        Vec3::new(3.5, 1.875, 6.05),
-        Vec3::new(0.0, 0.875, 0.9),
-        Vec3::new(0.0, 1.0, 0.0),
-        Vec3::new(3.0, 1.875, 6.0),
+        0.002,
+        Vec3::new(5.6, 1.32, 6.075),
+        Vec3::new(5.5, 1.575, 6.0),
+        Vec3::new(0.25, 0.0, 1.0).normalized(),
+        Vec3::new(5.5, 1.43, 6.0),
     );
 
+    // 2
     // let camera = ThinLensCamera::new(
     //     RES.0 as f32 / RES.1 as f32,
     //     60.0,
-    //     0.005,
-    //     Vec3::new(1.8, 0.0, 2.25),
-    //     Vec3::new(1.5, 0.0, 1.5),
+    //     0.0001,
+    //     Vec3::new(7.25, -0.5, 9.0),
+    //     Vec3::new(5.0, 2.25, 6.0),
     //     Vec3::new(0.0, 1.0, 0.0),
-    //     Vec3::new(1.8, 0.0, 2.0),
+    //     Vec3::new(5.0, 2.25, 6.0),
     // );
 
+    // 1
     // let camera = ThinLensCamera::new(
     //     RES.0 as f32 / RES.1 as f32,
     //     60.0,
-    //     0.015,
-    //     Vec3::new(1.5, 1.5, 2.5),
-    //     Vec3::new(1.7, 1.7, 1.9),
+    //     0.0001,
+    //     Vec3::new(7.5, -2.0, 9.5) * 1.7,
     //     Vec3::new(0.0, 1.0, 0.0),
-    //     Vec3::new(1.8, 1.8, 2.3),
+    //     Vec3::new(0.0, 1.0, 0.0),
+    //     Vec3::new(5.0, 0.0, 6.0),
     // );
 
     let mut cameras = CameraStore::new();
@@ -113,9 +114,10 @@ fn main() {
 
     let (camera, world) = setup();
 
-    let mut film = Film::<U3>::new(
+    let mut film = Film::<U4>::new(
         &[
             ChannelKind::Color,
+            ChannelKind::Alpha,
             ChannelKind::Background,
             ChannelKind::WorldNormal,
         ],
@@ -162,7 +164,7 @@ fn main() {
             &[ChannelKind::WorldNormal, ChannelKind::Color],
             "renders",
             format!("mb_{}_iters_frame_{}", MB_ITERS, frame),
-            false,
+            true,
         )
         .unwrap();
     }

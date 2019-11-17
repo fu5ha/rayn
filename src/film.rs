@@ -228,7 +228,7 @@ impl<'a, N: ArrayLength<ChannelStorage>> Film<N> {
                                 let idx = x as usize + (self.res.h - 1 - y as usize) * self.res.w;
                                 let col = color_buf[idx];
                                 let a = alpha_buf[idx];
-                                let rgb = (col * a).saturated().gamma_corrected(2.2);
+                                let rgb = (col).saturated().gamma_corrected(2.2);
                                 let a = a.powf(1.0 / 2.2);
                                 *pixel = image::Rgba([
                                     (rgb.x * 255.0).min(255.0).max(0.0) as u8,
