@@ -207,6 +207,12 @@ impl<'a, N: ArrayLength<ChannelStorage>> Film<N> {
         base_name: IS,
         transparent_background: bool,
     ) -> Result<(), String> {
+        use std::fs::DirBuilder;
+        DirBuilder::new()
+            .recursive(true)
+            .create(output_folder.as_ref())
+            .unwrap();
+
         let base_name = base_name.into();
 
         let channels = self.channels.lock().unwrap();
@@ -229,7 +235,6 @@ impl<'a, N: ArrayLength<ChannelStorage>> Film<N> {
                                 let col = color_buf[idx];
                                 let a = alpha_buf[idx];
                                 let rgb = (col).saturated().gamma_corrected(2.2);
-                                let a = a.powf(1.0 / 2.2);
                                 *pixel = image::Rgba([
                                     (rgb.x * 255.0).min(255.0).max(0.0) as u8,
                                     (rgb.y * 255.0).min(255.0).max(0.0) as u8,
