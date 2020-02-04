@@ -28,3 +28,5 @@ bumpalo = { version = "2.6", features = ["collections"] }
 # ultraviolet = { path = "../ultraviolet" }
 ultraviolet = "0.3"
 pbr = "1.0.2"
+quasi-rd = "0.1"
+arrayref = "0.3"

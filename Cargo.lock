@@ -13,6 +13,12 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "08abcc3b4e9339e33a3d0a5ed15d84a687350c05689d825e0f6655eef9e76a94"
 
 [[package]]
+name = "arrayref"
+version = "0.3.6"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "a4c527152e37cf757a3f78aae5a06fbeefdb07ccc535c980a3208ee3060dd544"
+
+[[package]]
 name = "autocfg"
 version = "0.1.7"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -413,6 +419,17 @@ dependencies = [
 ]
 
 [[package]]
+name = "quasi-rd"
+version = "0.1.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "e8ffbac43477fd2de09cced26caedb39ac10e6d627631ce8118f66391d1dc7f9"
+dependencies = [
+ "num-bigint",
+ "num-rational",
+ "num-traits 0.2.9",
+]
+
+[[package]]
 name = "quote"
 version = "0.6.13"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -476,12 +493,14 @@ dependencies = [
 name = "rayn"
 version = "0.1.0"
 dependencies = [
+ "arrayref",
  "bumpalo",
  "generic-array",
  "image",
  "minterpolate",
  "num_cpus",
  "pbr",
+ "quasi-rd",
  "rand",
  "rayon",
  "sdfu",

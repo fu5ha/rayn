@@ -5,7 +5,7 @@ use crate::math::{f32x4, RandomSample2d, Vec2, Vec2u, Vec3, Wec2, Wec3};
 use crate::ray::WRay;
 
 pub trait Camera: Send + Sync {
-    fn get_rays(&self, tile_coord: Vec2u, uv: Wec2, time: f32x4, rng: &mut SmallRng) -> WRay;
+    fn get_rays(&self, tile_coord: Vec2u, uv: Wec2, time: f32x4, samples: &[f32x4; 2]) -> WRay;
 }
 
 #[derive(Clone, Copy, Debug)]
@@ -47,7 +47,7 @@ impl<TR> PinholeCamera<TR> {
 }
 
 impl<OS: WSequenced<Wec3>> Camera for PinholeCamera<OS> {
-    fn get_rays(&self, tile_coord: Vec2u, uv: Wec2, time: f32x4, _rng: &mut SmallRng) -> WRay {
+    fn get_rays(&self, tile_coord: Vec2u, uv: Wec2, time: f32x4, _samples: &[f32x4; 2]) -> WRay {
         let origin = self.origin_sequence.sample_at(time);
         WRay::new(
             origin,
@@ -93,7 +93,7 @@ where
     U: WSequenced<Wec3>,
     F: WSequenced<Wec3>,
 {
-    fn get_rays(&self, tile_coord: Vec2u, uv: Wec2, time: f32x4, rng: &mut SmallRng) -> WRay {
+    fn get_rays(&self, tile_coord: Vec2u, uv: Wec2, time: f32x4, samples: &[f32x4; 2]) -> WRay {
         let origin = self.origin.sample_at(time);
         let at = self.at.sample_at(time);
         let up = self.up.sample_at(time);
@@ -112,7 +112,7 @@ where
         let horiz = basis_u * self.half_size.x * focus_dist * f32x4::from(2.0) * uv.x;
         let verti = basis_v * self.half_size.y * focus_dist * f32x4::from(2.0) * uv.y;
 
-        let rd = Wec2::rand_in_unit_disk(rng) * aperture;
+        let rd = Wec2::rand_in_unit_disk(samples) * aperture;
         let offset = basis_u * rd.x + basis_v * rd.y;
 
         let origin = origin + offset;

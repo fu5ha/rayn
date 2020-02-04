@@ -40,43 +40,43 @@ impl OrthonormalBasis<Wat3> for Wec3 {
 }
 
 pub trait RandomSample2d {
-    fn rand_in_unit_disk(rng: &mut SmallRng) -> Self;
+    type Sample;
+    fn rand_in_unit_disk(samples: &Self::Sample) -> Self;
 }
 
 impl RandomSample2d for Wec2 {
-    fn rand_in_unit_disk(rng: &mut SmallRng) -> Self {
-        let rho = rng.gen::<[f32; 4]>();
-        let rho = f32x4::from(rho).sqrt();
-        let theta = rng.gen::<[f32; 4]>();
-        let theta = f32x4::from(theta) * f32x4::from(2f32 * PI);
+    type Sample = [f32x4; 2];
+    fn rand_in_unit_disk(samples: &Self::Sample) -> Self {
+        let rho = samples[0].sqrt();
+        let theta = samples[1] * f32x4::from(2f32 * PI);
         let (sin, cos) = theta.sin_cos();
         Wec2::new(rho * cos, rho * sin)
     }
 }
 
 pub trait RandomSample3d<T> {
-    fn rand_in_unit_sphere(rng: &mut SmallRng) -> Self;
-    fn rand_on_unit_sphere(rng: &mut SmallRng) -> Self;
-    fn cosine_weighted_in_hemisphere(rng: &mut SmallRng, factor: T) -> Self;
+    type Sample;
+    fn rand_in_unit_sphere(samples: &Self::Sample) -> Self;
+    fn rand_on_unit_sphere(samples: &Self::Sample) -> Self;
+    fn cosine_weighted_in_hemisphere(samples: &Self::Sample, factor: T) -> Self;
 }
 
 impl RandomSample3d<f32x4> for Wec3 {
-    fn rand_in_unit_sphere(rng: &mut SmallRng) -> Self {
-        let theta = rng.gen::<[f32; 4]>();
-        let theta = f32x4::from(theta) * f32x4::from(2f32 * PI);
-        let phi = rng.gen::<[f32; 4]>();
-        let phi = f32x4::from(phi) * f32x4::from(2.0) - f32x4::ONE;
+    type Sample = [f32x4; 2];
+    fn rand_in_unit_sphere(samples: &Self::Sample) -> Self {
+        let theta = samples[0] * f32x4::from(2f32 * PI);
+        let phi = samples[1] * f32x4::from(2.0) - f32x4::ONE;
         let ophisq = (f32x4::ONE - phi * phi).sqrt();
         let (sin, cos) = theta.sin_cos();
         Wec3::new(ophisq * cos, ophisq * sin, phi)
     }
 
-    fn rand_on_unit_sphere(rng: &mut SmallRng) -> Self {
-        Self::rand_in_unit_sphere(rng).normalized()
+    fn rand_on_unit_sphere(samples: &Self::Sample) -> Self {
+        Self::rand_in_unit_sphere(samples).normalized()
     }
 
-    fn cosine_weighted_in_hemisphere(rng: &mut SmallRng, constriction: f32x4) -> Self {
-        let xy = Wec2::rand_in_unit_disk(rng) * constriction;
+    fn cosine_weighted_in_hemisphere(samples: &Self::Sample, constriction: f32x4) -> Self {
+        let xy = Wec2::rand_in_unit_disk(samples) * constriction;
         let z = (f32x4::ONE - xy.mag_sq()).sqrt();
         Wec3::new(xy.x, xy.y, z)
     }

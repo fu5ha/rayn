@@ -429,6 +429,13 @@ impl<'a, N: ArrayLength<ChannelStorage> + ArrayLength<ChannelTileStorage>> Film<
             let mut rng = SmallRng::seed_from_u64(tile.index as u64);
             // let mut rng = SmallRng::from_rng(thread_rng()).unwrap();
 
+            let mut sequences = [
+                (0, quasi_rd::Sequence::new_with_offset(100, 0)),
+                (1, quasi_rd::Sequence::new_with_offset(100, 1)),
+                (2, quasi_rd::Sequence::new_with_offset(100, 2)),
+                (3, quasi_rd::Sequence::new_with_offset(100, 3)),
+            ];
+
             let ray_bump = Bump::new();
             let mut spawned_rays = BumpVec::new_in(&ray_bump);
             let mut spawned_wrays = BumpVec::new_in(&ray_bump);
@@ -440,30 +447,60 @@ impl<'a, N: ArrayLength<ChannelStorage> + ArrayLength<ChannelTileStorage>> Film<
             let mut hit_store = HitStore::from_hitable_store(&hit_bump, &world.hitables);
             let mut bsdf_bump = Bump::new();
 
+            let time_range_range = time_range.end - time_range.start;
+
             for x in tile.raster_bounds.min.x..tile.raster_bounds.max.x {
                 for y in tile.raster_bounds.min.y..tile.raster_bounds.max.y {
                     let tile_coord = Vec2u::new(x, y) - tile.raster_bounds.min;
+
+                    sequences[0].0 = 0;
+                    sequences[1].0 = 1;
+                    sequences[2].0 = 2;
+                    sequences[3].0 = 3;
+
+                    sequences[0].1.seek(0);
+                    sequences[1].1.seek(1);
+                    sequences[2].1.seek(2);
+                    sequences[3].1.seek(3);
 
                     for _ in 0..samples {
                         // let raster_pixel = Vec2u::new(x, y);
                         // sampler.begin_pixel(raster_pixel);
                         let ndcs = Wec2::from([
-                            sample_uv(x, y, tile.screen_to_ndc_size, &fis, &mut rng),
-                            sample_uv(x, y, tile.screen_to_ndc_size, &fis, &mut rng),
-                            sample_uv(x, y, tile.screen_to_ndc_size, &fis, &mut rng),
-                            sample_uv(x, y, tile.screen_to_ndc_size, &fis, &mut rng),
+                            sample_uv(x, y, tile.screen_to_ndc_size, &fis, &[sequences[0].1.next_f32(), sequences[0].1.next_f32()]),
+                            sample_uv(x, y, tile.screen_to_ndc_size, &fis, &[sequences[1].1.next_f32(), sequences[1].1.next_f32()]),
+                            sample_uv(x, y, tile.screen_to_ndc_size, &fis, &[sequences[2].1.next_f32(), sequences[2].1.next_f32()]),
+                            sample_uv(x, y, tile.screen_to_ndc_size, &fis, &[sequences[3].1.next_f32(), sequences[3].1.next_f32()]),
                         ]);
 
                         let times = f32x4::from([
-                            rng.gen_range(time_range.start, time_range.end),
-                            rng.gen_range(time_range.start, time_range.end),
-                            rng.gen_range(time_range.start, time_range.end),
-                            rng.gen_range(time_range.start, time_range.end),
+                            time_range.start + sequences[0].1.next_f32() * time_range_range,
+                            time_range.start + sequences[1].1.next_f32() * time_range_range,
+                            time_range.start + sequences[2].1.next_f32() * time_range_range,
+                            time_range.start + sequences[3].1.next_f32() * time_range_range,
                         ]);
 
-                        let rays = camera.get_rays(tile_coord, ndcs, times, &mut rng);
+                        let rays = camera.get_rays(tile_coord, ndcs, times, &[
+                            f32x4::from([
+                                sequences[0].1.next_f32(),
+                                sequences[1].1.next_f32(),
+                                sequences[2].1.next_f32(),
+                                sequences[3].1.next_f32(),
+                            ]),
+                            f32x4::from([
+                                sequences[0].1.next_f32(),
+                                sequences[1].1.next_f32(),
+                                sequences[2].1.next_f32(),
+                                sequences[3].1.next_f32(),
+                            ]),
+                        ]);
 
                         spawned_wrays.push(rays);
+
+                        for sequence in sequences.iter_mut() {
+                            sequence.0 += 4;
+                            sequence.1.seek(sequence.0);
+                        }
                     }
                 }
             }
@@ -488,9 +525,17 @@ impl<'a, N: ArrayLength<ChannelStorage> + ArrayLength<ChannelTileStorage>> Film<
                 hit_store.process_hits(&world.hitables, &mut wintersections);
 
                 for (mat_id, wshading_point) in wintersections.drain(..) {
+                    let samples = [
+                        f32x4::from(rng.gen::<[f32; 4]>()),
+                        f32x4::from(rng.gen::<[f32; 4]>()),
+                        f32x4::from(rng.gen::<[f32; 4]>()),
+                        f32x4::from(rng.gen::<[f32; 4]>()),
+                        f32x4::from(rng.gen::<[f32; 4]>()),
+                        f32x4::from(rng.gen::<[f32; 4]>()),
+                    ];
                     integrator.integrate(
                         world,
-                        &mut rng,
+                        &samples,
                         depth,
                         mat_id,
                         wshading_point,
@@ -596,9 +641,9 @@ fn sample_uv(
     y: usize,
     screen_to_ndc_size: Vec2,
     fis: &FilterImportanceSampler,
-    rng: &mut SmallRng,
+    samples: &[f32; 2],
 ) -> Vec2 {
-    let uv_samp = Vec2::new(rng.gen::<f32>(), rng.gen::<f32>());
+    let uv_samp = Vec2::new(samples[0], samples[1]);
     let fis_samp = Vec2::new(fis.sample(uv_samp.x), fis.sample(uv_samp.y));
 
     let screen_coord = Vec2::new(x as f32 + 0.5, y as f32 + 0.5) + fis_samp;

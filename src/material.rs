@@ -3,6 +3,8 @@ use bumpalo::Bump;
 use rand::rngs::SmallRng;
 use rand::Rng;
 
+use arrayref::array_ref;
+
 use crate::hitable::WShadingPoint;
 use crate::math::{f32x4, f_schlick, f_schlick_c, OrthonormalBasis, RandomSample3d, Wec3};
 use crate::spectrum::WSrgb;
@@ -14,7 +16,7 @@ pub trait BSDF {
         &self,
         wo: Wec3,
         intersection: &WShadingPoint,
-        rng: &mut SmallRng,
+        samples: &[f32x4; 5],
     ) -> Option<WScatteringEvent>;
 
     fn le(&self, _wo: Wec3, _intersection: &WShadingPoint) -> WSrgb {
@@ -105,9 +107,9 @@ impl BSDF for LambertianBSDF {
         &self,
         _wo: Wec3,
         intersection: &WShadingPoint,
-        rng: &mut SmallRng,
+        samples: &[f32x4; 5],
     ) -> Option<WScatteringEvent> {
-        let diffuse_sample = Wec3::cosine_weighted_in_hemisphere(rng, f32x4::ONE);
+        let diffuse_sample = Wec3::cosine_weighted_in_hemisphere(array_ref![samples,0,2], f32x4::ONE);
         let diffuse_bounce = (intersection.basis * diffuse_sample).normalized();
         let diffuse_pdf = diffuse_sample.dot(Wec3::unit_z()) / f32x4::from(PI);
         let diffuse_f = self.albedo / f32x4::from(PI);
@@ -163,19 +165,19 @@ impl BSDF for DielectricBSDF {
         &self,
         wo: Wec3,
         intersection: &WShadingPoint,
-        rng: &mut SmallRng,
+        samples: &[f32x4; 5],
     ) -> Option<WScatteringEvent> {
         let norm = intersection.normal;
         let cos = norm.dot(-wo).abs();
 
         // diffuse part
-        let diffuse_sample = Wec3::cosine_weighted_in_hemisphere(rng, f32x4::ONE);
+        let diffuse_sample = Wec3::cosine_weighted_in_hemisphere(array_ref![samples,0,2], f32x4::ONE);
         let diffuse_bounce = (intersection.basis * diffuse_sample).normalized();
         let diffuse_pdf = diffuse_sample.dot(Wec3::unit_z()) / f32x4::from(PI);
         let diffuse_f = self.albedo / f32x4::from(PI);
 
         // spec part
-        let spec_sample = Wec3::cosine_weighted_in_hemisphere(rng, self.roughness);
+        let spec_sample = Wec3::cosine_weighted_in_hemisphere(array_ref![samples,0,2], self.roughness);
         let reflection = wo.reflected(norm);
         let basis = reflection.get_orthonormal_basis();
         let spec_bounce = (basis * spec_sample).normalized();
@@ -185,7 +187,7 @@ impl BSDF for DielectricBSDF {
         // merge by fresnel
         let fresnel = f_schlick(cos, f32x4::from(0.04));
 
-        let fresnel_sample = f32x4::from(rng.gen::<[f32; 4]>());
+        let fresnel_sample = f32x4::from(samples[4]);
 
         let fresnel_mask = fresnel_sample.cmp_lt(fresnel);
 
@@ -238,13 +240,14 @@ pub struct MetallicBSDF {
 }
 
 impl BSDF for MetallicBSDF {
+    // samples must contain at least two samples.
     fn scatter(
         &self,
         wo: Wec3,
         intersection: &WShadingPoint,
-        rng: &mut SmallRng,
+        samples: &[f32x4; 5],
     ) -> Option<WScatteringEvent> {
-        let sample = Wec3::cosine_weighted_in_hemisphere(rng, self.roughness);
+        let sample = unsafe { Wec3::cosine_weighted_in_hemisphere(array_ref![samples,0,2], self.roughness) };
         let reflection = wo.reflected(intersection.normal);
         let basis = reflection.get_orthonormal_basis();
         let bounce = basis * sample;
@@ -351,7 +354,7 @@ impl BSDF for SkyBSDF {
         &self,
         _wo: Wec3,
         _intersection: &WShadingPoint,
-        _rng: &mut SmallRng,
+        _samples: &[f32x4; 5],
     ) -> Option<WScatteringEvent> {
         None
     }
@@ -408,9 +411,9 @@ where
         &self,
         wo: Wec3,
         intersection: &WShadingPoint,
-        rng: &mut SmallRng,
+        samples: &[f32x4; 5],
     ) -> Option<WScatteringEvent> {
-        self.inner.scatter(wo, intersection, rng)
+        self.inner.scatter(wo, intersection, samples)
     }
 
     fn le(&self, _wo: Wec3, _intersection: &WShadingPoint) -> WSrgb {

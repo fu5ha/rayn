@@ -16,7 +16,7 @@ pub trait Integrator: Send + Sync {
     fn integrate(
         &self,
         world: &World,
-        rng: &mut SmallRng,
+        rng: &[f32x4; 6],
         depth: usize,
         material: MaterialHandle,
         intersection: WShadingPoint,
@@ -35,7 +35,7 @@ impl Integrator for PathTracingIntegrator {
     fn integrate(
         &self,
         world: &World,
-        rng: &mut SmallRng,
+        samples: &[f32x4; 6],
         depth: usize,
         material: MaterialHandle,
         mut intersection: WShadingPoint,
@@ -50,7 +50,7 @@ impl Integrator for PathTracingIntegrator {
 
         intersection.ray.radiance += bsdf.le(-wi, &intersection) * intersection.ray.throughput;
 
-        let scattering_event = bsdf.scatter(wi, &intersection, rng);
+        let scattering_event = bsdf.scatter(wi, &intersection, arrayref::array_ref![samples,0,5]);
 
         if let Some(se) = scattering_event {
             let ndl = se.wi.dot(intersection.normal).abs();
@@ -81,13 +81,14 @@ impl Integrator for PathTracingIntegrator {
                 }
             }
 
-            for ((ray, new_throughput), roulette_factor) in new_rays
+            for (((ray, new_throughput), roulette_factor), roulette_sample) in new_rays
                 .iter_mut()
                 .zip(throughputs.iter())
                 .zip(roulette_factor.as_ref().iter())
+                .zip(samples[5].as_ref().iter())
             {
                 if ray.valid {
-                    if depth >= self.max_bounces || rng.gen::<f32>() < *roulette_factor {
+                    if depth >= self.max_bounces || *roulette_sample < *roulette_factor {
                         output_samples.push((ray.tile_coord, ChannelSample::Color(ray.radiance)));
                     } else {
                         if !new_throughput.is_nan() {

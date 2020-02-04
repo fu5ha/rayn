@@ -29,7 +29,7 @@ use world::World;
 use std::time::Instant;
 
 const RES: (usize, usize) = (1920, 1080);
-const SAMPLES: usize = 4;
+const SAMPLES: usize = 8;
 
 const MB_ITERS: usize = 14;
 
@@ -131,7 +131,7 @@ fn main() {
 
     let filter = BlackmanHarrisFilter::new(2.0);
     // let filter = BoxFilter::default();
-    let integrator = PathTracingIntegrator { max_bounces: 5 };
+    let integrator = PathTracingIntegrator { max_bounces: 3 };
 
     for frame in frame_range {
         let start = Instant::now();
