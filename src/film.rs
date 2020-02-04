@@ -424,17 +424,16 @@ impl<'a, N: ArrayLength<ChannelStorage> + ArrayLength<ChannelTileStorage>> Film<
         }
 
         let fis = FilterImportanceSampler::new(filter);
+        
+        let mut sequence = quasi_rd::Sequence::new(50);
+
+        let mut samples = [0u64; 4 * samples * 50];
+        
+        sequence.fill_with_samples_raw(&mut raw_samples[..]);
 
         self.integrate_tiles(tiles, samples * 4, |tile| {
             let mut rng = SmallRng::seed_from_u64(tile.index as u64);
             // let mut rng = SmallRng::from_rng(thread_rng()).unwrap();
-
-            let mut sequences = [
-                (0, quasi_rd::Sequence::new_with_offset(100, 0)),
-                (1, quasi_rd::Sequence::new_with_offset(100, 1)),
-                (2, quasi_rd::Sequence::new_with_offset(100, 2)),
-                (3, quasi_rd::Sequence::new_with_offset(100, 3)),
-            ];
 
             let ray_bump = Bump::new();
             let mut spawned_rays = BumpVec::new_in(&ray_bump);
@@ -452,25 +451,17 @@ impl<'a, N: ArrayLength<ChannelStorage> + ArrayLength<ChannelTileStorage>> Film<
             for x in tile.raster_bounds.min.x..tile.raster_bounds.max.x {
                 for y in tile.raster_bounds.min.y..tile.raster_bounds.max.y {
                     let tile_coord = Vec2u::new(x, y) - tile.raster_bounds.min;
+                    
+                    let scramble = (x + y * self.res.w) as u64;
 
-                    sequences[0].0 = 0;
-                    sequences[1].0 = 1;
-                    sequences[2].0 = 2;
-                    sequences[3].0 = 3;
-
-                    sequences[0].1.seek(0);
-                    sequences[1].1.seek(1);
-                    sequences[2].1.seek(2);
-                    sequences[3].1.seek(3);
-
-                    for _ in 0..samples {
+                    for samp in 0..samples {
                         // let raster_pixel = Vec2u::new(x, y);
                         // sampler.begin_pixel(raster_pixel);
                         let ndcs = Wec2::from([
-                            sample_uv(x, y, tile.screen_to_ndc_size, &fis, &[sequences[0].1.next_f32(), sequences[0].1.next_f32()]),
-                            sample_uv(x, y, tile.screen_to_ndc_size, &fis, &[sequences[1].1.next_f32(), sequences[1].1.next_f32()]),
-                            sample_uv(x, y, tile.screen_to_ndc_size, &fis, &[sequences[2].1.next_f32(), sequences[2].1.next_f32()]),
-                            sample_uv(x, y, tile.screen_to_ndc_size, &fis, &[sequences[3].1.next_f32(), sequences[3].1.next_f32()]),
+                            sample_uv(x, y, tile.screen_to_ndc_size, &fis, &[quasi_rd::scramble_f32(samples[0 + (0 + 4 * samp) * 50], scramble), quasi_rd::scramble_f32(samples[1 + (0 + 4 * samp) * 50], scramble)]),
+                            sample_uv(x, y, tile.screen_to_ndc_size, &fis, &[quasi_rd::scramble_f32(samples[0 + (1 + 4 * samp) * 50], scramble), quasi_rd::scramble_f32(samples[1 + (1 + 4 * samp) * 50], scramble)]),
+                            sample_uv(x, y, tile.screen_to_ndc_size, &fis, &[quasi_rd::scramble_f32(samples[0 + (2 + 4 * samp) * 50], scramble), quasi_rd::scramble_f32(samples[1 + (2 + 4 * samp) * 50], scramble)]),
+                            sample_uv(x, y, tile.screen_to_ndc_size, &fis, &[quasi_rd::scramble_f32(samples[0 + (3 + 4 * samp) * 50], scramble), quasi_rd::scramble_f32(samples[1 + (3 + 4 * samp) * 50], scramble)]),
                         ]);
 
                         let times = f32x4::from([
@@ -480,7 +471,7 @@ impl<'a, N: ArrayLength<ChannelStorage> + ArrayLength<ChannelTileStorage>> Film<
                             time_range.start + sequences[3].1.next_f32() * time_range_range,
                         ]);
 
-                        let rays = camera.get_rays(tile_coord, ndcs, times, &[
+                        let rays = camera.get_rays(scramble, tile_coord, ndcs, times, &[
                             f32x4::from([
                                 sequences[0].1.next_f32(),
                                 sequences[1].1.next_f32(),
