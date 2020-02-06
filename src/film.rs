@@ -10,6 +10,7 @@ use crate::hitable::HitStore;
 use crate::integrator::Integrator;
 use crate::math::{f32x4, Aabru, Extent2u, Vec2, Vec2u, Vec3, Wec2};
 use crate::ray::{Ray, WRay};
+use crate::sampler::Samples;
 use crate::spectrum::Srgb;
 use crate::world::World;
 
@@ -124,36 +125,6 @@ macro_rules! channel_storage_index {
         } else {
             panic!("Attempted to index into channel storage array with wrong channel type.");
         }
-    };
-}
-
-macro_rules! sample {
-    ($dims:expr, $samples:expr, $dim:expr, $samp:expr, $scram:expr) => {
-        // quasi_rd::scramble_f32($samples[$dim + $samp * $dims], $scram)
-        // quasi_rd::raw_to_f32($samples[$dim + $samp * $dims])
-        $samples[$dim + $samp * $dims]
-    };
-}
-
-macro_rules! wide_sample {
-    ($dims:expr, $samples:expr, $dim:expr, $begin_samp:expr, $scram:expr) => {
-        f32x4::from([
-            sample!($dims, $samples, $dim, $begin_samp, $scram),
-            sample!($dims, $samples, $dim, $begin_samp + 1, $scram),
-            sample!($dims, $samples, $dim, $begin_samp + 2, $scram),
-            sample!($dims, $samples, $dim, $begin_samp + 3, $scram),
-        ])
-    };
-}
-
-macro_rules! wide_sample_array {
-    ($dims:expr, $samples:expr, $dim:expr, $sample_nums:expr, $scrams:expr) => {
-        f32x4::from([
-            sample!($dims, $samples, $dim, $sample_nums[0], $scrams[0]),
-            sample!($dims, $samples, $dim, $sample_nums[1], $scrams[1]),
-            sample!($dims, $samples, $dim, $sample_nums[2], $scrams[2]),
-            sample!($dims, $samples, $dim, $sample_nums[3], $scrams[3]),
-        ])
     };
 }
 
@@ -455,20 +426,11 @@ impl<'a, N: ArrayLength<ChannelStorage> + ArrayLength<ChannelTileStorage>> Film<
 
         let fis = FilterImportanceSampler::new(filter);
 
-        let dims = 2;
-        let mut sequence = quasi_rd::Sequence::new(dims);
+        let sets_1d = 1 + integrator.requested_1d_sample_sets();
+        let sets_2d = 2 + integrator.requested_2d_sample_sets();
 
-        let mut rng = SmallRng::seed_from_u64(0);
-        let mut raw_samples = vec![0f32; 4 * samples * dims];
-        // sequence.fill_with_samples_f32(&mut raw_samples[..]);
-        // for s in raw_samples.iter_mut() {
-        //     *s = rng.gen();
-        // }
-        for s in raw_samples.iter_mut() {
-            *s = sequence.next_f32();
-        }
-
-        let res = self.res;
+        // let sample_sets = Samples::new_rd(4 * samples, sets_1d, sets_2d);
+        let sample_sets = Samples::new_random(4 * samples, sets_1d, sets_2d);
 
         self.integrate_tiles(tiles, samples * 4, |tile| {
             let mut rng = SmallRng::seed_from_u64(tile.index as u64);
@@ -490,18 +452,10 @@ impl<'a, N: ArrayLength<ChannelStorage> + ArrayLength<ChannelTileStorage>> Film<
             for x in tile.raster_bounds.min.x..tile.raster_bounds.max.x {
                 for y in tile.raster_bounds.min.y..tile.raster_bounds.max.y {
                     let tile_coord = Vec2u::new(x, y) - tile.raster_bounds.min;
-                    let scramble = {
-                        use std::hash::Hasher;
-                        let mut hasher = std::collections::hash_map::DefaultHasher::new();
-                        hasher.write_usize(x + y * res.w);
-                        hasher.finish()
-                    };
+                    let scramble = rng.gen();
 
                     for samp in 0..samples {
                         let sample_nums = [4 * samp, 4 * samp + 1, 4 * samp + 2, 4 * samp + 3];
-
-                        // let raster_pixel = Vec2u::new(x, y);
-                        // sampler.begin_pixel(raster_pixel);
 
                         let ndcs = Wec2::from([
                             sample_uv(
@@ -510,8 +464,8 @@ impl<'a, N: ArrayLength<ChannelStorage> + ArrayLength<ChannelTileStorage>> Film<
                                 tile.screen_to_ndc_size,
                                 &fis,
                                 &[
-                                    sample!(dims, raw_samples, 0, sample_nums[0], scramble),
-                                    sample!(dims, raw_samples, 1, sample_nums[0], scramble),
+                                    sample_sets.sample_2d(0, sample_nums[0], scramble, 0),
+                                    sample_sets.sample_2d(1, sample_nums[0], scramble, 0),
                                 ],
                             ),
                             sample_uv(
@@ -520,8 +474,8 @@ impl<'a, N: ArrayLength<ChannelStorage> + ArrayLength<ChannelTileStorage>> Film<
                                 tile.screen_to_ndc_size,
                                 &fis,
                                 &[
-                                    sample!(dims, raw_samples, 0, sample_nums[1], scramble),
-                                    sample!(dims, raw_samples, 1, sample_nums[1], scramble),
+                                    sample_sets.sample_2d(0, sample_nums[1], scramble, 0),
+                                    sample_sets.sample_2d(1, sample_nums[1], scramble, 0),
                                 ],
                             ),
                             sample_uv(
@@ -530,8 +484,8 @@ impl<'a, N: ArrayLength<ChannelStorage> + ArrayLength<ChannelTileStorage>> Film<
                                 tile.screen_to_ndc_size,
                                 &fis,
                                 &[
-                                    sample!(dims, raw_samples, 0, sample_nums[2], scramble),
-                                    sample!(dims, raw_samples, 1, sample_nums[2], scramble),
+                                    sample_sets.sample_2d(0, sample_nums[2], scramble, 0),
+                                    sample_sets.sample_2d(1, sample_nums[2], scramble, 0),
                                 ],
                             ),
                             sample_uv(
@@ -540,15 +494,16 @@ impl<'a, N: ArrayLength<ChannelStorage> + ArrayLength<ChannelTileStorage>> Film<
                                 tile.screen_to_ndc_size,
                                 &fis,
                                 &[
-                                    sample!(dims, raw_samples, 0, sample_nums[3], scramble),
-                                    sample!(dims, raw_samples, 1, sample_nums[3], scramble),
+                                    sample_sets.sample_2d(0, sample_nums[3], scramble, 0),
+                                    sample_sets.sample_2d(1, sample_nums[3], scramble, 0),
                                 ],
                             ),
                         ]);
 
                         let times = f32x4::from(time_range.start)
-                            + time_range_range * f32x4::from(rng.gen::<[f32; 4]>());
-                        // * wide_sample!(dims, raw_samples, 2, sample_nums[0], scramble);
+                            + time_range_range
+                            // * f32x4::from(rng.gen::<[f32; 4]>());
+                            * sample_sets.wide_sample_1d(sample_nums[0], scramble, 0);
 
                         let rays = camera.get_rays(
                             scramble,
@@ -557,10 +512,8 @@ impl<'a, N: ArrayLength<ChannelStorage> + ArrayLength<ChannelTileStorage>> Film<
                             ndcs,
                             times,
                             &[
-                                f32x4::from(rng.gen::<[f32; 4]>()),
-                                f32x4::from(rng.gen::<[f32; 4]>()),
-                                // wide_sample!(dims, raw_samples, 3, sample_nums[0], scramble),
-                                // wide_sample!(dims, raw_samples, 4, sample_nums[0], scramble),
+                                sample_sets.wide_sample_2d(0, sample_nums[0], scramble, 1),
+                                sample_sets.wide_sample_2d(1, sample_nums[0], scramble, 1),
                             ],
                         );
 
@@ -590,54 +543,40 @@ impl<'a, N: ArrayLength<ChannelStorage> + ArrayLength<ChannelTileStorage>> Film<
 
                 for (mat_id, wshading_point) in wintersections.drain(..) {
                     let samples = [
-                        f32x4::from(rng.gen::<[f32; 4]>()),
-                        f32x4::from(rng.gen::<[f32; 4]>()),
-                        f32x4::from(rng.gen::<[f32; 4]>()),
-                        f32x4::from(rng.gen::<[f32; 4]>()),
-                        f32x4::from(rng.gen::<[f32; 4]>()),
-                        f32x4::from(rng.gen::<[f32; 4]>()),
-                        // wide_sample_array!(
-                        //     dims,
-                        //     raw_samples,
-                        //     5 + depth * 6,
-                        //     wshading_point.ray.sample,
-                        //     wshading_point.ray.scramble
-                        // ),
-                        // wide_sample_array!(
-                        //     dims,
-                        //     raw_samples,
-                        //     6 + depth * 6,
-                        //     wshading_point.ray.sample,
-                        //     wshading_point.ray.scramble
-                        // ),
-                        // wide_sample_array!(
-                        //     dims,
-                        //     raw_samples,
-                        //     7 + depth * 6,
-                        //     wshading_point.ray.sample,
-                        //     wshading_point.ray.scramble
-                        // ),
-                        // wide_sample_array!(
-                        //     dims,
-                        //     raw_samples,
-                        //     8 + depth * 6,
-                        //     wshading_point.ray.sample,
-                        //     wshading_point.ray.scramble
-                        // ),
-                        // wide_sample_array!(
-                        //     dims,
-                        //     raw_samples,
-                        //     9 + depth * 6,
-                        //     wshading_point.ray.sample,
-                        //     wshading_point.ray.scramble
-                        // ),
-                        // wide_sample_array!(
-                        //     dims,
-                        //     raw_samples,
-                        //     10 + depth * 6,
-                        //     wshading_point.ray.sample,
-                        //     wshading_point.ray.scramble
-                        // ),
+                        sample_sets.wide_sample_1d_array(
+                            wshading_point.ray.sample,
+                            wshading_point.ray.scramble,
+                            1 + depth * 2,
+                        ),
+                        sample_sets.wide_sample_2d_array(
+                            0,
+                            wshading_point.ray.sample,
+                            wshading_point.ray.scramble,
+                            2 + depth * 2,
+                        ),
+                        sample_sets.wide_sample_2d_array(
+                            1,
+                            wshading_point.ray.sample,
+                            wshading_point.ray.scramble,
+                            2 + depth * 2,
+                        ),
+                        sample_sets.wide_sample_2d_array(
+                            0,
+                            wshading_point.ray.sample,
+                            wshading_point.ray.scramble,
+                            3 + depth * 2,
+                        ),
+                        sample_sets.wide_sample_2d_array(
+                            1,
+                            wshading_point.ray.sample,
+                            wshading_point.ray.scramble,
+                            3 + depth * 2,
+                        ),
+                        sample_sets.wide_sample_1d_array(
+                            wshading_point.ray.sample,
+                            wshading_point.ray.scramble,
+                            2 + depth * 2,
+                        ),
                     ];
                     integrator.integrate(
                         world,

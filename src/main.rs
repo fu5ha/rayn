@@ -9,6 +9,7 @@ mod integrator;
 mod material;
 mod math;
 mod ray;
+mod sampler;
 mod sdf;
 mod spectrum;
 mod sphere;
@@ -19,7 +20,7 @@ use film::{ChannelKind, Film};
 use filter::BlackmanHarrisFilter;
 use hitable::HitableStore;
 use integrator::PathTracingIntegrator;
-use material::{Dielectric, Emissive, MaterialStore, Metallic, Sky};
+use material::{Dielectric, Emissive, Lambertian, MaterialStore, Metallic, Sky};
 use math::{f32x4, Extent2u, Vec3};
 use sdf::{BoxFold, MandelBox, SphereFold, TracedSDF};
 use spectrum::WSrgb;
@@ -29,9 +30,9 @@ use world::World;
 use std::time::Instant;
 
 const RES: (usize, usize) = (1280, 720);
-const SAMPLES: usize = 1;
+const SAMPLES: usize = 20;
 
-const MB_ITERS: usize = 14;
+const MB_ITERS: usize = 20;
 
 fn setup() -> (CameraHandle, World) {
     let mut materials = MaterialStore::new();
@@ -41,10 +42,12 @@ fn setup() -> (CameraHandle, World) {
     //     f32x4::from(0.1),
     // ));
 
-    let pink = materials.add_material(Metallic::new(
-        WSrgb::new_splat(0.75, 0.5, 0.55),
-        f32x4::from(0.0),
-    ));
+    let pink = materials.add_material(Lambertian::new(WSrgb::new_splat(0.75, 0.5, 0.55)));
+
+    // let pink = materials.add_material(Metallic::new(
+    //     WSrgb::new_splat(0.75, 0.5, 0.55),
+    //     f32x4::from(0.0),
+    // ));
 
     let _white_emissive = materials.add_material(Emissive::new(WSrgb::new_splat(2.0, 3.0, 4.5)));
 
@@ -65,16 +68,17 @@ fn setup() -> (CameraHandle, World) {
     //     white_emissive,
     // ));
 
-    let camera = ThinLensCamera::new(
-        RES.0 as f32 / RES.1 as f32,
-        60.0,
-        // 0.002,
-        0.00001,
-        Vec3::new(5.6, 1.32, 6.075),
-        Vec3::new(5.5, 1.575, 6.0),
-        Vec3::new(0.25, 0.0, 1.0).normalized(),
-        Vec3::new(5.5, 1.43, 6.0),
-    );
+    // 3
+    // let camera = ThinLensCamera::new(
+    //     RES.0 as f32 / RES.1 as f32,
+    //     60.0,
+    //     // 0.002,
+    //     0.00001,
+    //     Vec3::new(5.6, 1.32, 6.075),
+    //     Vec3::new(5.5, 1.575, 6.0),
+    //     Vec3::new(0.25, 0.0, 1.0).normalized(),
+    //     Vec3::new(5.5, 1.43, 6.0),
+    // );
 
     // 2
     // let camera = ThinLensCamera::new(
@@ -88,15 +92,15 @@ fn setup() -> (CameraHandle, World) {
     // );
 
     // 1
-    // let camera = ThinLensCamera::new(
-    //     RES.0 as f32 / RES.1 as f32,
-    //     60.0,
-    //     0.0001,
-    //     Vec3::new(7.5, -2.0, 9.5) * 1.7,
-    //     Vec3::new(0.0, 1.0, 0.0),
-    //     Vec3::new(0.0, 1.0, 0.0),
-    //     Vec3::new(5.0, 0.0, 6.0),
-    // );
+    let camera = ThinLensCamera::new(
+        RES.0 as f32 / RES.1 as f32,
+        60.0,
+        0.0001,
+        Vec3::new(7.5, -2.0, 9.5) * 1.5,
+        Vec3::new(0.0, 1.0, 0.0),
+        Vec3::new(0.0, 1.0, 0.0),
+        Vec3::new(5.0, 0.0, 6.0),
+    );
 
     let mut cameras = CameraStore::new();
 

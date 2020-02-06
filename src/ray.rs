@@ -26,7 +26,7 @@ macro_rules! rays {
     }
 }
 
-rays!(Ray => Vec3, Srgb, f32, Vec2u, bool, u64, usize, WRay => Wec3, WSrgb, f32x4, [Vec2u; 4], [bool; 4], [u64; 4], [usize; 4]);
+rays!(Ray => Vec3, Srgb, f32, Vec2u, bool, f32, usize, WRay => Wec3, WSrgb, f32x4, [Vec2u; 4], [bool; 4], [f32; 4], [usize; 4]);
 
 impl Ray {
     #[allow(dead_code)]
@@ -35,7 +35,7 @@ impl Ray {
         dir: Vec3,
         time: f32,
         tile_coord: Vec2u,
-        scramble: u64,
+        scramble: f32,
         sample: usize,
     ) -> Self {
         Self {
@@ -60,7 +60,7 @@ impl Ray {
             throughput: Srgb::zero(),
             tile_coord: Vec2u::zero(),
             valid: false,
-            scramble: 0,
+            scramble: 0f32,
             sample: 0,
         }
     }
@@ -73,7 +73,7 @@ impl WRay {
         time: f32x4,
         tile_coord: [Vec2u; 4],
         valid: [bool; 4],
-        scramble: [u64; 4],
+        scramble: [f32; 4],
         sample: [usize; 4],
     ) -> Self {
         Self {
