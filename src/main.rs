@@ -19,7 +19,7 @@ use film::{ChannelKind, Film};
 use filter::BlackmanHarrisFilter;
 use hitable::HitableStore;
 use integrator::PathTracingIntegrator;
-use material::{Dielectric, Emissive, MaterialStore, Sky};
+use material::{Dielectric, Emissive, MaterialStore, Metallic, Sky};
 use math::{f32x4, Extent2u, Vec3};
 use sdf::{BoxFold, MandelBox, SphereFold, TracedSDF};
 use spectrum::WSrgb;
@@ -28,17 +28,22 @@ use world::World;
 
 use std::time::Instant;
 
-const RES: (usize, usize) = (1920, 1080);
-const SAMPLES: usize = 8;
+const RES: (usize, usize) = (1280, 720);
+const SAMPLES: usize = 1;
 
 const MB_ITERS: usize = 14;
 
 fn setup() -> (CameraHandle, World) {
     let mut materials = MaterialStore::new();
 
-    let pink = materials.add_material(Dielectric::new(
+    // let pink = materials.add_material(Dielectric::new(
+    //     WSrgb::new_splat(0.75, 0.5, 0.55),
+    //     f32x4::from(0.1),
+    // ));
+
+    let pink = materials.add_material(Metallic::new(
         WSrgb::new_splat(0.75, 0.5, 0.55),
-        f32x4::from(0.1),
+        f32x4::from(0.0),
     ));
 
     let _white_emissive = materials.add_material(Emissive::new(WSrgb::new_splat(2.0, 3.0, 4.5)));
@@ -63,7 +68,8 @@ fn setup() -> (CameraHandle, World) {
     let camera = ThinLensCamera::new(
         RES.0 as f32 / RES.1 as f32,
         60.0,
-        0.002,
+        // 0.002,
+        0.00001,
         Vec3::new(5.6, 1.32, 6.075),
         Vec3::new(5.5, 1.575, 6.0),
         Vec3::new(0.25, 0.0, 1.0).normalized(),
@@ -131,7 +137,7 @@ fn main() {
 
     let filter = BlackmanHarrisFilter::new(2.0);
     // let filter = BoxFilter::default();
-    let integrator = PathTracingIntegrator { max_bounces: 3 };
+    let integrator = PathTracingIntegrator { max_bounces: 5 };
 
     for frame in frame_range {
         let start = Instant::now();

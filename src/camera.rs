@@ -5,7 +5,15 @@ use crate::math::{f32x4, RandomSample2d, Vec2, Vec2u, Vec3, Wec2, Wec3};
 use crate::ray::WRay;
 
 pub trait Camera: Send + Sync {
-    fn get_rays(&self, tile_coord: Vec2u, uv: Wec2, time: f32x4, samples: &[f32x4; 2]) -> WRay;
+    fn get_rays(
+        &self,
+        scramble: u64,
+        sample_nums: [usize; 4],
+        tile_coord: Vec2u,
+        uv: Wec2,
+        time: f32x4,
+        samples: &[f32x4; 2],
+    ) -> WRay;
 }
 
 #[derive(Clone, Copy, Debug)]
@@ -47,7 +55,15 @@ impl<TR> PinholeCamera<TR> {
 }
 
 impl<OS: WSequenced<Wec3>> Camera for PinholeCamera<OS> {
-    fn get_rays(&self, tile_coord: Vec2u, uv: Wec2, time: f32x4, _samples: &[f32x4; 2]) -> WRay {
+    fn get_rays(
+        &self,
+        scramble: u64,
+        sample_nums: [usize; 4],
+        tile_coord: Vec2u,
+        uv: Wec2,
+        time: f32x4,
+        _samples: &[f32x4; 2],
+    ) -> WRay {
         let origin = self.origin_sequence.sample_at(time);
         WRay::new(
             origin,
@@ -55,6 +71,8 @@ impl<OS: WSequenced<Wec3>> Camera for PinholeCamera<OS> {
             time,
             [tile_coord, tile_coord, tile_coord, tile_coord],
             [true, true, true, true],
+            [scramble, scramble, scramble, scramble],
+            sample_nums,
         )
     }
 }
@@ -93,7 +111,15 @@ where
     U: WSequenced<Wec3>,
     F: WSequenced<Wec3>,
 {
-    fn get_rays(&self, tile_coord: Vec2u, uv: Wec2, time: f32x4, samples: &[f32x4; 2]) -> WRay {
+    fn get_rays(
+        &self,
+        scramble: u64,
+        sample_nums: [usize; 4],
+        tile_coord: Vec2u,
+        uv: Wec2,
+        time: f32x4,
+        samples: &[f32x4; 2],
+    ) -> WRay {
         let origin = self.origin.sample_at(time);
         let at = self.at.sample_at(time);
         let up = self.up.sample_at(time);
@@ -122,6 +148,8 @@ where
             time,
             [tile_coord, tile_coord, tile_coord, tile_coord],
             [true, true, true, true],
+            [scramble, scramble, scramble, scramble],
+            sample_nums,
         )
     }
 }

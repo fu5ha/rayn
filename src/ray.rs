@@ -2,7 +2,7 @@ use crate::math::{f32x4, Vec2u, Vec3, Wec3};
 use crate::spectrum::{Srgb, WSrgb};
 
 macro_rules! rays {
-    ($($n:ident => $t:ident, $st:ident, $tt:ident, $tc:ty, $bt:ty),+) => {
+    ($($n:ident => $t:ident, $st:ident, $tt:ident, $tc:ty, $bt:ty, $scramt:ty, $samplet:ty),+) => {
         $(#[derive(Clone, Copy, Debug)]
         pub struct $n {
             pub time: $tt,
@@ -12,6 +12,8 @@ macro_rules! rays {
             pub throughput: $st,
             pub tile_coord: $tc,
             pub valid: $bt,
+            pub scramble: $scramt,
+            pub sample: $samplet,
         }
 
         impl $n {
@@ -24,9 +26,18 @@ macro_rules! rays {
     }
 }
 
+rays!(Ray => Vec3, Srgb, f32, Vec2u, bool, u64, usize, WRay => Wec3, WSrgb, f32x4, [Vec2u; 4], [bool; 4], [u64; 4], [usize; 4]);
+
 impl Ray {
     #[allow(dead_code)]
-    pub fn new(origin: Vec3, dir: Vec3, time: f32, tile_coord: Vec2u) -> Self {
+    pub fn new(
+        origin: Vec3,
+        dir: Vec3,
+        time: f32,
+        tile_coord: Vec2u,
+        scramble: u64,
+        sample: usize,
+    ) -> Self {
         Self {
             time,
             origin,
@@ -35,6 +46,8 @@ impl Ray {
             throughput: Srgb::one(),
             tile_coord,
             valid: true,
+            scramble,
+            sample,
         }
     }
 
@@ -47,6 +60,8 @@ impl Ray {
             throughput: Srgb::zero(),
             tile_coord: Vec2u::zero(),
             valid: false,
+            scramble: 0,
+            sample: 0,
         }
     }
 }
@@ -58,6 +73,8 @@ impl WRay {
         time: f32x4,
         tile_coord: [Vec2u; 4],
         valid: [bool; 4],
+        scramble: [u64; 4],
+        sample: [usize; 4],
     ) -> Self {
         Self {
             time,
@@ -67,6 +84,8 @@ impl WRay {
             throughput: WSrgb::one(),
             tile_coord,
             valid,
+            scramble,
+            sample,
         }
     }
 
@@ -91,8 +110,6 @@ impl WRay {
             && !((raynan & 0b0001 == 0b0001) == self.valid[3])
     }
 }
-
-rays!(Ray => Vec3, Srgb, f32, Vec2u, bool, WRay => Wec3, WSrgb, f32x4, [Vec2u; 4], [bool; 4]);
 
 impl From<[Ray; 4]> for WRay {
     fn from(rays: [Ray; 4]) -> Self {
@@ -124,6 +141,18 @@ impl From<[Ray; 4]> for WRay {
                 rays[3].tile_coord,
             ],
             valid: [rays[0].valid, rays[1].valid, rays[2].valid, rays[3].valid],
+            scramble: [
+                rays[0].scramble,
+                rays[1].scramble,
+                rays[2].scramble,
+                rays[3].scramble,
+            ],
+            sample: [
+                rays[0].sample,
+                rays[1].sample,
+                rays[2].sample,
+                rays[3].sample,
+            ],
         }
     }
 }
@@ -144,6 +173,8 @@ impl Into<[Ray; 4]> for WRay {
                 throughput: throughputs[0],
                 tile_coord: self.tile_coord[0],
                 valid: self.valid[0],
+                scramble: self.scramble[0],
+                sample: self.sample[0],
             },
             Ray {
                 time: times[1],
@@ -153,6 +184,8 @@ impl Into<[Ray; 4]> for WRay {
                 throughput: throughputs[1],
                 tile_coord: self.tile_coord[1],
                 valid: self.valid[1],
+                scramble: self.scramble[1],
+                sample: self.sample[1],
             },
             Ray {
                 time: times[2],
@@ -162,6 +195,8 @@ impl Into<[Ray; 4]> for WRay {
                 throughput: throughputs[2],
                 tile_coord: self.tile_coord[2],
                 valid: self.valid[2],
+                scramble: self.scramble[2],
+                sample: self.sample[2],
             },
             Ray {
                 time: times[3],
@@ -171,6 +206,8 @@ impl Into<[Ray; 4]> for WRay {
                 throughput: throughputs[3],
                 tile_coord: self.tile_coord[3],
                 valid: self.valid[3],
+                scramble: self.scramble[3],
+                sample: self.sample[3],
             },
         ]
     }
