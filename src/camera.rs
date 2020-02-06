@@ -7,7 +7,7 @@ use crate::ray::WRay;
 pub trait Camera: Send + Sync {
     fn get_rays(
         &self,
-        scramble: u64,
+        scramble: f32,
         sample_nums: [usize; 4],
         tile_coord: Vec2u,
         uv: Wec2,
@@ -57,7 +57,7 @@ impl<TR> PinholeCamera<TR> {
 impl<OS: WSequenced<Wec3>> Camera for PinholeCamera<OS> {
     fn get_rays(
         &self,
-        scramble: u64,
+        scramble: f32,
         sample_nums: [usize; 4],
         tile_coord: Vec2u,
         uv: Wec2,
@@ -113,7 +113,7 @@ where
 {
     fn get_rays(
         &self,
-        scramble: u64,
+        scramble: f32,
         sample_nums: [usize; 4],
         tile_coord: Vec2u,
         uv: Wec2,

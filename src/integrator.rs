@@ -25,7 +25,8 @@ pub trait Integrator: Send + Sync {
         output_samples: &mut BumpVec<(Vec2u, ChannelSample)>,
     );
 
-    fn max_dimensions_per_sample(&self) -> usize;
+    fn requested_1d_sample_sets(&self) -> usize;
+    fn requested_2d_sample_sets(&self) -> usize;
 }
 
 #[derive(Clone, Copy)]
@@ -34,8 +35,12 @@ pub struct PathTracingIntegrator {
 }
 
 impl Integrator for PathTracingIntegrator {
-    fn max_dimensions_per_sample(&self) -> usize {
-        (self.max_bounces + 1) * 6
+    fn requested_1d_sample_sets(&self) -> usize {
+        (self.max_bounces + 1) * 2
+    }
+
+    fn requested_2d_sample_sets(&self) -> usize {
+        (self.max_bounces + 1) * 2
     }
 
     fn integrate(

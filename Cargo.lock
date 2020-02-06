@@ -421,8 +421,6 @@ dependencies = [
 [[package]]
 name = "quasi-rd"
 version = "0.1.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "e8ffbac43477fd2de09cced26caedb39ac10e6d627631ce8118f66391d1dc7f9"
 dependencies = [
  "num-bigint",
  "num-rational",
