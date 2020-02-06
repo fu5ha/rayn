@@ -24,6 +24,8 @@ pub trait Integrator: Send + Sync {
         spawned_rays: &mut BumpVec<Ray>,
         output_samples: &mut BumpVec<(Vec2u, ChannelSample)>,
     );
+
+    fn max_dimensions_per_sample(&self) -> usize;
 }
 
 #[derive(Clone, Copy)]
@@ -32,6 +34,10 @@ pub struct PathTracingIntegrator {
 }
 
 impl Integrator for PathTracingIntegrator {
+    fn max_dimensions_per_sample(&self) -> usize {
+        (self.max_bounces + 1) * 6
+    }
+
     fn integrate(
         &self,
         world: &World,
@@ -50,7 +56,7 @@ impl Integrator for PathTracingIntegrator {
 
         intersection.ray.radiance += bsdf.le(-wi, &intersection) * intersection.ray.throughput;
 
-        let scattering_event = bsdf.scatter(wi, &intersection, arrayref::array_ref![samples,0,5]);
+        let scattering_event = bsdf.scatter(wi, &intersection, arrayref::array_ref![samples, 0, 5]);
 
         if let Some(se) = scattering_event {
             let ndl = se.wi.dot(intersection.normal).abs();

@@ -127,6 +127,36 @@ macro_rules! channel_storage_index {
     };
 }
 
+macro_rules! sample {
+    ($dims:expr, $samples:expr, $dim:expr, $samp:expr, $scram:expr) => {
+        // quasi_rd::scramble_f32($samples[$dim + $samp * $dims], $scram)
+        // quasi_rd::raw_to_f32($samples[$dim + $samp * $dims])
+        $samples[$dim + $samp * $dims]
+    };
+}
+
+macro_rules! wide_sample {
+    ($dims:expr, $samples:expr, $dim:expr, $begin_samp:expr, $scram:expr) => {
+        f32x4::from([
+            sample!($dims, $samples, $dim, $begin_samp, $scram),
+            sample!($dims, $samples, $dim, $begin_samp + 1, $scram),
+            sample!($dims, $samples, $dim, $begin_samp + 2, $scram),
+            sample!($dims, $samples, $dim, $begin_samp + 3, $scram),
+        ])
+    };
+}
+
+macro_rules! wide_sample_array {
+    ($dims:expr, $samples:expr, $dim:expr, $sample_nums:expr, $scrams:expr) => {
+        f32x4::from([
+            sample!($dims, $samples, $dim, $sample_nums[0], $scrams[0]),
+            sample!($dims, $samples, $dim, $sample_nums[1], $scrams[1]),
+            sample!($dims, $samples, $dim, $sample_nums[2], $scrams[2]),
+            sample!($dims, $samples, $dim, $sample_nums[3], $scrams[3]),
+        ])
+    };
+}
+
 pub struct Tile<N: ArrayLength<ChannelTileStorage>> {
     index: usize,
     epoch: usize,
@@ -424,12 +454,21 @@ impl<'a, N: ArrayLength<ChannelStorage> + ArrayLength<ChannelTileStorage>> Film<
         }
 
         let fis = FilterImportanceSampler::new(filter);
-        
-        let mut sequence = quasi_rd::Sequence::new(50);
 
-        let mut samples = [0u64; 4 * samples * 50];
-        
-        sequence.fill_with_samples_raw(&mut raw_samples[..]);
+        let dims = 2;
+        let mut sequence = quasi_rd::Sequence::new(dims);
+
+        let mut rng = SmallRng::seed_from_u64(0);
+        let mut raw_samples = vec![0f32; 4 * samples * dims];
+        // sequence.fill_with_samples_f32(&mut raw_samples[..]);
+        // for s in raw_samples.iter_mut() {
+        //     *s = rng.gen();
+        // }
+        for s in raw_samples.iter_mut() {
+            *s = sequence.next_f32();
+        }
+
+        let res = self.res;
 
         self.integrate_tiles(tiles, samples * 4, |tile| {
             let mut rng = SmallRng::seed_from_u64(tile.index as u64);
@@ -446,52 +485,86 @@ impl<'a, N: ArrayLength<ChannelStorage> + ArrayLength<ChannelTileStorage>> Film<
             let mut hit_store = HitStore::from_hitable_store(&hit_bump, &world.hitables);
             let mut bsdf_bump = Bump::new();
 
-            let time_range_range = time_range.end - time_range.start;
+            let time_range_range = f32x4::from(time_range.end - time_range.start);
 
             for x in tile.raster_bounds.min.x..tile.raster_bounds.max.x {
                 for y in tile.raster_bounds.min.y..tile.raster_bounds.max.y {
                     let tile_coord = Vec2u::new(x, y) - tile.raster_bounds.min;
-                    
-                    let scramble = (x + y * self.res.w) as u64;
+                    let scramble = {
+                        use std::hash::Hasher;
+                        let mut hasher = std::collections::hash_map::DefaultHasher::new();
+                        hasher.write_usize(x + y * res.w);
+                        hasher.finish()
+                    };
 
                     for samp in 0..samples {
+                        let sample_nums = [4 * samp, 4 * samp + 1, 4 * samp + 2, 4 * samp + 3];
+
                         // let raster_pixel = Vec2u::new(x, y);
                         // sampler.begin_pixel(raster_pixel);
+
                         let ndcs = Wec2::from([
-                            sample_uv(x, y, tile.screen_to_ndc_size, &fis, &[quasi_rd::scramble_f32(samples[0 + (0 + 4 * samp) * 50], scramble), quasi_rd::scramble_f32(samples[1 + (0 + 4 * samp) * 50], scramble)]),
-                            sample_uv(x, y, tile.screen_to_ndc_size, &fis, &[quasi_rd::scramble_f32(samples[0 + (1 + 4 * samp) * 50], scramble), quasi_rd::scramble_f32(samples[1 + (1 + 4 * samp) * 50], scramble)]),
-                            sample_uv(x, y, tile.screen_to_ndc_size, &fis, &[quasi_rd::scramble_f32(samples[0 + (2 + 4 * samp) * 50], scramble), quasi_rd::scramble_f32(samples[1 + (2 + 4 * samp) * 50], scramble)]),
-                            sample_uv(x, y, tile.screen_to_ndc_size, &fis, &[quasi_rd::scramble_f32(samples[0 + (3 + 4 * samp) * 50], scramble), quasi_rd::scramble_f32(samples[1 + (3 + 4 * samp) * 50], scramble)]),
+                            sample_uv(
+                                x,
+                                y,
+                                tile.screen_to_ndc_size,
+                                &fis,
+                                &[
+                                    sample!(dims, raw_samples, 0, sample_nums[0], scramble),
+                                    sample!(dims, raw_samples, 1, sample_nums[0], scramble),
+                                ],
+                            ),
+                            sample_uv(
+                                x,
+                                y,
+                                tile.screen_to_ndc_size,
+                                &fis,
+                                &[
+                                    sample!(dims, raw_samples, 0, sample_nums[1], scramble),
+                                    sample!(dims, raw_samples, 1, sample_nums[1], scramble),
+                                ],
+                            ),
+                            sample_uv(
+                                x,
+                                y,
+                                tile.screen_to_ndc_size,
+                                &fis,
+                                &[
+                                    sample!(dims, raw_samples, 0, sample_nums[2], scramble),
+                                    sample!(dims, raw_samples, 1, sample_nums[2], scramble),
+                                ],
+                            ),
+                            sample_uv(
+                                x,
+                                y,
+                                tile.screen_to_ndc_size,
+                                &fis,
+                                &[
+                                    sample!(dims, raw_samples, 0, sample_nums[3], scramble),
+                                    sample!(dims, raw_samples, 1, sample_nums[3], scramble),
+                                ],
+                            ),
                         ]);
 
-                        let times = f32x4::from([
-                            time_range.start + sequences[0].1.next_f32() * time_range_range,
-                            time_range.start + sequences[1].1.next_f32() * time_range_range,
-                            time_range.start + sequences[2].1.next_f32() * time_range_range,
-                            time_range.start + sequences[3].1.next_f32() * time_range_range,
-                        ]);
+                        let times = f32x4::from(time_range.start)
+                            + time_range_range * f32x4::from(rng.gen::<[f32; 4]>());
+                        // * wide_sample!(dims, raw_samples, 2, sample_nums[0], scramble);
 
-                        let rays = camera.get_rays(scramble, tile_coord, ndcs, times, &[
-                            f32x4::from([
-                                sequences[0].1.next_f32(),
-                                sequences[1].1.next_f32(),
-                                sequences[2].1.next_f32(),
-                                sequences[3].1.next_f32(),
-                            ]),
-                            f32x4::from([
-                                sequences[0].1.next_f32(),
-                                sequences[1].1.next_f32(),
-                                sequences[2].1.next_f32(),
-                                sequences[3].1.next_f32(),
-                            ]),
-                        ]);
+                        let rays = camera.get_rays(
+                            scramble,
+                            sample_nums,
+                            tile_coord,
+                            ndcs,
+                            times,
+                            &[
+                                f32x4::from(rng.gen::<[f32; 4]>()),
+                                f32x4::from(rng.gen::<[f32; 4]>()),
+                                // wide_sample!(dims, raw_samples, 3, sample_nums[0], scramble),
+                                // wide_sample!(dims, raw_samples, 4, sample_nums[0], scramble),
+                            ],
+                        );
 
                         spawned_wrays.push(rays);
-
-                        for sequence in sequences.iter_mut() {
-                            sequence.0 += 4;
-                            sequence.1.seek(sequence.0);
-                        }
                     }
                 }
             }
@@ -523,6 +596,48 @@ impl<'a, N: ArrayLength<ChannelStorage> + ArrayLength<ChannelTileStorage>> Film<
                         f32x4::from(rng.gen::<[f32; 4]>()),
                         f32x4::from(rng.gen::<[f32; 4]>()),
                         f32x4::from(rng.gen::<[f32; 4]>()),
+                        // wide_sample_array!(
+                        //     dims,
+                        //     raw_samples,
+                        //     5 + depth * 6,
+                        //     wshading_point.ray.sample,
+                        //     wshading_point.ray.scramble
+                        // ),
+                        // wide_sample_array!(
+                        //     dims,
+                        //     raw_samples,
+                        //     6 + depth * 6,
+                        //     wshading_point.ray.sample,
+                        //     wshading_point.ray.scramble
+                        // ),
+                        // wide_sample_array!(
+                        //     dims,
+                        //     raw_samples,
+                        //     7 + depth * 6,
+                        //     wshading_point.ray.sample,
+                        //     wshading_point.ray.scramble
+                        // ),
+                        // wide_sample_array!(
+                        //     dims,
+                        //     raw_samples,
+                        //     8 + depth * 6,
+                        //     wshading_point.ray.sample,
+                        //     wshading_point.ray.scramble
+                        // ),
+                        // wide_sample_array!(
+                        //     dims,
+                        //     raw_samples,
+                        //     9 + depth * 6,
+                        //     wshading_point.ray.sample,
+                        //     wshading_point.ray.scramble
+                        // ),
+                        // wide_sample_array!(
+                        //     dims,
+                        //     raw_samples,
+                        //     10 + depth * 6,
+                        //     wshading_point.ray.sample,
+                        //     wshading_point.ray.scramble
+                        // ),
                     ];
                     integrator.integrate(
                         world,
