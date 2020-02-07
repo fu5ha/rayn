@@ -1,5 +1,3 @@
-use rand::rngs::SmallRng;
-
 use crate::animation::WSequenced;
 use crate::math::{f32x4, RandomSample2d, Vec2, Vec2u, Vec3, Wec2, Wec3};
 use crate::ray::WRay;

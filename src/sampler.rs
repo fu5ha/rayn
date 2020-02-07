@@ -16,9 +16,9 @@ pub struct Samples {
 }
 
 impl Samples {
-    pub fn new_rd(samples: usize, sets_1d: usize, sets_2d: usize) -> Self {
-        let mut seq_1d = quasi_rd::Sequence::new(1);
-        let mut seq_2d = quasi_rd::Sequence::new(2);
+    pub fn new_rd(samples: usize, sets_1d: usize, sets_2d: usize, offset: u64) -> Self {
+        let mut seq_1d = quasi_rd::Sequence::new_with_offset(1, offset);
+        let mut seq_2d = quasi_rd::Sequence::new_with_offset(2, offset);
 
         let mut samples_1d = vec![0f32; samples];
         let mut samples_2d = vec![0f32; samples * 2];
@@ -38,6 +38,7 @@ impl Samples {
         }
     }
 
+    #[allow(dead_code)]
     pub fn new_random(samples: usize, sets_1d: usize, sets_2d: usize) -> Self {
         let mut samples_1d = vec![0f32; samples];
         let mut samples_2d = vec![0f32; samples * 2];
