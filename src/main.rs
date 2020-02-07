@@ -29,27 +29,27 @@ use world::World;
 
 use std::time::Instant;
 
-const RES: (usize, usize) = (1280, 720);
-const SAMPLES: usize = 20;
+const RES: (usize, usize) = (1920, 1080);
+const SAMPLES: usize = 16;
 
 const MB_ITERS: usize = 20;
 
 fn setup() -> (CameraHandle, World) {
     let mut materials = MaterialStore::new();
 
-    // let pink = materials.add_material(Dielectric::new(
-    //     WSrgb::new_splat(0.75, 0.5, 0.55),
-    //     f32x4::from(0.1),
-    // ));
+    let grey = materials.add_material(Dielectric::new(
+        WSrgb::new_splat(0.3, 0.3, 0.3),
+        f32x4::from(0.1),
+    ));
 
-    let pink = materials.add_material(Lambertian::new(WSrgb::new_splat(0.75, 0.5, 0.55)));
+    // let pink = materials.add_material(Lambertian::new(WSrgb::new_splat(0.75, 0.5, 0.55)));
 
     // let pink = materials.add_material(Metallic::new(
     //     WSrgb::new_splat(0.75, 0.5, 0.55),
     //     f32x4::from(0.0),
     // ));
 
-    let _white_emissive = materials.add_material(Emissive::new(WSrgb::new_splat(2.0, 3.0, 4.5)));
+    let white_emissive = materials.add_material(Emissive::new(WSrgb::new_splat(2.0, 3.0, 4.5) * f32x4::from(2.25)));
 
     let sky = materials.add_material(Sky {});
 
@@ -59,14 +59,14 @@ fn setup() -> (CameraHandle, World) {
 
     hitables.push(TracedSDF::new(
         MandelBox::new(MB_ITERS, BoxFold::new(1.0), SphereFold::new(0.5, 1.0), 2.0),
-        pink,
+        grey,
     ));
 
-    // hitables.push(Sphere::new(
-    //     Vec3::new(3.25, 1.75, 5.25),
-    //     0.1,
-    //     white_emissive,
-    // ));
+    hitables.push(Sphere::new(
+        Vec3::new(-3.5, 1.75, 10.0),
+        2.5,
+        white_emissive,
+    ));
 
     // 3
     // let camera = ThinLensCamera::new(
@@ -154,7 +154,7 @@ fn main() {
             camera,
             &integrator,
             &filter,
-            Extent2u::new(8, 8),
+            Extent2u::new(16, 16),
             frame_start..frame_end,
             SAMPLES,
         );

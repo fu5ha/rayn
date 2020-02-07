@@ -3,8 +3,6 @@ use crate::spectrum::WSrgb;
 use std::f32::consts::PI;
 pub use ultraviolet::f32x4;
 
-use rand::rngs::SmallRng;
-use rand::Rng;
 use vek::vec;
 
 pub type Vec3 = ultraviolet::Vec3;

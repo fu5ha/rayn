@@ -1,7 +1,5 @@
 use bumpalo::collections::Vec as BumpVec;
 use bumpalo::Bump;
-use rand::rngs::SmallRng;
-use rand::Rng;
 
 use crate::film::ChannelSample;
 use crate::hitable::WShadingPoint;

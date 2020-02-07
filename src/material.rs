@@ -1,8 +1,5 @@
 use bumpalo::Bump;
 
-use rand::rngs::SmallRng;
-use rand::Rng;
-
 use arrayref::array_ref;
 
 use crate::hitable::WShadingPoint;

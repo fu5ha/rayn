@@ -429,12 +429,13 @@ impl<'a, N: ArrayLength<ChannelStorage> + ArrayLength<ChannelTileStorage>> Film<
         let sets_1d = 1 + integrator.requested_1d_sample_sets();
         let sets_2d = 2 + integrator.requested_2d_sample_sets();
 
-        // let sample_sets = Samples::new_rd(4 * samples, sets_1d, sets_2d);
-        let sample_sets = Samples::new_random(4 * samples, sets_1d, sets_2d);
 
         self.integrate_tiles(tiles, samples * 4, |tile| {
             let mut rng = SmallRng::seed_from_u64(tile.index as u64);
             // let mut rng = SmallRng::from_rng(thread_rng()).unwrap();
+            let offset = (tile.index as u64) << 32;
+            let sample_sets = Samples::new_rd(4 * samples, sets_1d, sets_2d, offset);
+            // let sample_sets = Samples::new_random(4 * samples, sets_1d, sets_2d);
 
             let ray_bump = Bump::new();
             let mut spawned_rays = BumpVec::new_in(&ray_bump);
@@ -692,6 +693,7 @@ fn sample_uv(
     let fis_samp = Vec2::new(fis.sample(uv_samp.x), fis.sample(uv_samp.y));
 
     let screen_coord = Vec2::new(x as f32 + 0.5, y as f32 + 0.5) + fis_samp;
+    // let screen_coord = Vec2::new(x as f32 + uv_samp.x, y as f32 + uv_samp.y);
 
     screen_to_ndc_size * screen_coord
 }
