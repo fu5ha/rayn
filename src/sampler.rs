@@ -9,39 +9,37 @@ use ultraviolet::f32x4;
 // }
 
 pub struct Samples {
+    pub samples: usize,
     pub samples_1d: Vec<f32>,
     pub samples_2d: Vec<f32>,
-    pub offsets_1d: Vec<f32>,
-    pub offsets_2d: Vec<f32>,
 }
 
 impl Samples {
     pub fn new_rd(samples: usize, sets_1d: usize, sets_2d: usize, offset: u64) -> Self {
-        let mut seq_1d = quasi_rd::Sequence::new_with_offset(1, offset);
-        let mut seq_2d = quasi_rd::Sequence::new_with_offset(2, offset);
+        let mut samples_1d = vec![0f32; samples * sets_1d];
+        let mut samples_2d = vec![0f32; samples * 2 * sets_2d];
 
-        let mut samples_1d = vec![0f32; samples];
-        let mut samples_2d = vec![0f32; samples * 2];
+        for i in 0..sets_1d {
+            let mut seq_1d = quasi_rd::Sequence::new_with_offset(1, offset + i as u64);
+            seq_1d.fill_with_samples_f32(&mut samples_1d[samples * i..samples * (i + 1)]);
+        }
 
-        seq_1d.fill_with_samples_f32(&mut samples_1d[..]);
-        seq_2d.fill_with_samples_f32(&mut samples_2d[..]);
-
-        let mut rng = SmallRng::from_rng(thread_rng()).unwrap();
-        let offsets_1d = (0..sets_1d).into_iter().map(|_| rng.gen()).collect::<_>();
-        let offsets_2d = (0..sets_2d).into_iter().map(|_| rng.gen()).collect::<_>();
+        for i in 0..sets_2d {
+            let mut seq_2d = quasi_rd::Sequence::new_with_offset(2, offset + sets_1d as u64 + i as u64);
+            seq_2d.fill_with_samples_f32(&mut samples_2d[samples * 2 * i..2 * samples * (i + 1)]);
+        }
 
         Self {
+            samples,
             samples_1d,
             samples_2d,
-            offsets_1d,
-            offsets_2d,
         }
     }
 
     #[allow(dead_code)]
     pub fn new_random(samples: usize, sets_1d: usize, sets_2d: usize) -> Self {
-        let mut samples_1d = vec![0f32; samples];
-        let mut samples_2d = vec![0f32; samples * 2];
+        let mut samples_1d = vec![0f32; samples * sets_1d];
+        let mut samples_2d = vec![0f32; samples * 2 * sets_2d];
 
         let mut rng = SmallRng::from_rng(thread_rng()).unwrap();
 
@@ -53,20 +51,16 @@ impl Samples {
             *s = rng.gen();
         }
 
-        let offsets_1d = (0..sets_1d).into_iter().map(|_| rng.gen()).collect::<_>();
-        let offsets_2d = (0..sets_2d).into_iter().map(|_| rng.gen()).collect::<_>();
-
         Self {
+            samples,
             samples_1d,
             samples_2d,
-            offsets_1d,
-            offsets_2d,
         }
     }
 
     #[inline]
     pub fn sample_1d(&self, sample: usize, scramble: f32, set: usize) -> f32 {
-        (self.samples_1d[sample] + self.offsets_1d[set] + scramble).fract()
+        (self.samples_1d[sample + self.samples * set] + scramble).fract()
     }
 
     #[inline]
@@ -96,7 +90,7 @@ impl Samples {
 
     #[inline]
     pub fn sample_2d(&self, dim: usize, sample: usize, scramble: f32, set: usize) -> f32 {
-        (self.samples_2d[dim + sample * 2] + self.offsets_2d[set] + scramble).fract()
+        (self.samples_2d[dim + sample * 2 + self.samples * 2 * set] + scramble).fract()
     }
 
     #[inline]

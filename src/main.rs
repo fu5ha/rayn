@@ -29,7 +29,7 @@ use world::World;
 
 use std::time::Instant;
 
-const RES: (usize, usize) = (1920, 1080);
+const RES: (usize, usize) = (2560, 1440);
 const SAMPLES: usize = 16;
 
 const MB_ITERS: usize = 20;
@@ -49,7 +49,9 @@ fn setup() -> (CameraHandle, World) {
     //     f32x4::from(0.0),
     // ));
 
-    let white_emissive = materials.add_material(Emissive::new(WSrgb::new_splat(2.0, 3.0, 4.5) * f32x4::from(2.25)));
+    let white_emissive = materials.add_material(Emissive::new(WSrgb::new_splat(4.0, 3.0, 2.5) * f32x4::from(2.25)));
+    let blue_emissive = materials.add_material(Emissive::new(WSrgb::new_splat(1.5, 2.5, 5.0) * f32x4::from(2.25)));
+    let pink_emissive = materials.add_material(Emissive::new(WSrgb::new_splat(4.5, 2.0, 3.0) * f32x4::from(2.25)));
 
     let sky = materials.add_material(Sky {});
 
@@ -58,14 +60,38 @@ fn setup() -> (CameraHandle, World) {
     hitables.push(Sphere::new(Vec3::new(0.0, 0.0, 0.0), 300.0, sky));
 
     hitables.push(TracedSDF::new(
-        MandelBox::new(MB_ITERS, BoxFold::new(1.0), SphereFold::new(0.5, 1.0), 2.0),
+        MandelBox::new(MB_ITERS, BoxFold::new(1.0), SphereFold::new(0.5, 1.0), -2.0),
         grey,
     ));
 
     hitables.push(Sphere::new(
-        Vec3::new(-3.5, 1.75, 10.0),
-        2.5,
+        Vec3::new(0.0, 0.5, 2.65),
+        0.35,
         white_emissive,
+    ));
+
+    hitables.push(Sphere::new(
+        Vec3::new(1.5, -0.35, 1.95),
+        0.1,
+        blue_emissive,
+    ));
+
+    hitables.push(Sphere::new(
+        Vec3::new(1.5, 0.35, 1.95),
+        0.1,
+        pink_emissive,
+    ));
+
+    hitables.push(Sphere::new(
+        Vec3::new(-1.5, -0.35, 1.95),
+        0.1,
+        blue_emissive,
+    ));
+
+    hitables.push(Sphere::new(
+        Vec3::new(-1.5, 0.35, 1.95),
+        0.1,
+        pink_emissive,
     ));
 
     // 3
@@ -95,11 +121,11 @@ fn setup() -> (CameraHandle, World) {
     let camera = ThinLensCamera::new(
         RES.0 as f32 / RES.1 as f32,
         60.0,
-        0.0001,
-        Vec3::new(7.5, -2.0, 9.5) * 1.5,
+        0.005,
+        Vec3::new(7.5, -2.0, 9.5) * 0.3,
+        Vec3::new(0.0, 1.0, 1.0),
         Vec3::new(0.0, 1.0, 0.0),
-        Vec3::new(0.0, 1.0, 0.0),
-        Vec3::new(5.0, 0.0, 6.0),
+        Vec3::new(1.5, -0.2, 2.0),
     );
 
     let mut cameras = CameraStore::new();

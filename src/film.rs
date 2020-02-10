@@ -14,7 +14,7 @@ use crate::sampler::Samples;
 use crate::spectrum::Srgb;
 use crate::world::World;
 
-use std::collections::HashMap;
+use std::collections::hash_map::HashMap;
 use std::ops::Range;
 use std::sync::{
     atomic::{AtomicUsize, Ordering},
@@ -429,13 +429,14 @@ impl<'a, N: ArrayLength<ChannelStorage> + ArrayLength<ChannelTileStorage>> Film<
         let sets_1d = 1 + integrator.requested_1d_sample_sets();
         let sets_2d = 2 + integrator.requested_2d_sample_sets();
 
+        let sample_sets = Samples::new_rd(4 * samples, sets_1d, sets_2d, 0);
+        // let sample_sets = Samples::new_random(4 * samples, sets_1d, sets_2d);
+
+        let width = self.res.w;
 
         self.integrate_tiles(tiles, samples * 4, |tile| {
-            let mut rng = SmallRng::seed_from_u64(tile.index as u64);
             // let mut rng = SmallRng::from_rng(thread_rng()).unwrap();
-            let offset = (tile.index as u64) << 32;
-            let sample_sets = Samples::new_rd(4 * samples, sets_1d, sets_2d, offset);
-            // let sample_sets = Samples::new_random(4 * samples, sets_1d, sets_2d);
+            // let offset = (tile.index as u64) << 32;
 
             let ray_bump = Bump::new();
             let mut spawned_rays = BumpVec::new_in(&ray_bump);
@@ -453,6 +454,8 @@ impl<'a, N: ArrayLength<ChannelStorage> + ArrayLength<ChannelTileStorage>> Film<
             for x in tile.raster_bounds.min.x..tile.raster_bounds.max.x {
                 for y in tile.raster_bounds.min.y..tile.raster_bounds.max.y {
                     let tile_coord = Vec2u::new(x, y) - tile.raster_bounds.min;
+
+                    let mut rng = SmallRng::seed_from_u64((x + y * width) as u64);
                     let scramble = rng.gen();
 
                     for samp in 0..samples {
