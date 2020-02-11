@@ -29,8 +29,8 @@ use world::World;
 
 use std::time::Instant;
 
-const RES: (usize, usize) = (2560, 1440);
-const SAMPLES: usize = 16;
+const RES: (usize, usize) = (1280, 720);
+const SAMPLES: usize = 128;
 
 const MB_ITERS: usize = 20;
 

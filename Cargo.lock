@@ -421,6 +421,7 @@ dependencies = [
 [[package]]
 name = "quasi-rd"
 version = "0.1.0"
+source = "git+https://github.com/termhn/quasi-rd#ce117035e8bea4bb8f48ef692f7c7f15f5d2bcd3"
 dependencies = [
  "num-bigint",
  "num-rational",

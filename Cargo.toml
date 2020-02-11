@@ -28,6 +28,6 @@ bumpalo = { version = "2.6", features = ["collections"] }
 # ultraviolet = { path = "../ultraviolet" }
 ultraviolet = "0.3"
 pbr = "1.0.2"
-quasi-rd = { path = "../quasi-rd" }
-# quasi-rd = "0.1"
+# quasi-rd = { path = "../quasi-rd" }
+quasi-rd = { git = "https://github.com/termhn/quasi-rd", branch = "master" }
 arrayref = "0.3"
