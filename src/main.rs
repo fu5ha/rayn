@@ -22,34 +22,27 @@ use filter::BlackmanHarrisFilter;
 use hitable::HitableStore;
 use integrator::PathTracingIntegrator;
 use light::{Light, SphereLight};
-use material::{Dielectric, Emissive, Lambertian, MaterialStore, Sky};
-use math::{f32x4, Extent2u, Vec3};
+use material::{Dielectric, MaterialStore, Sky};
+use math::{Extent2u, Vec3};
 use sdf::{BoxFold, MandelBox, SphereFold, TracedSDF};
-use spectrum::{Srgb, WSrgb};
+use spectrum::Srgb;
 use sphere::Sphere;
 use world::World;
 
 use std::time::Instant;
 
-const RES: (usize, usize) = (960, 540);
-const SAMPLES: usize = 4;
+const RES: (usize, usize) = (1920, 1080);
+const SAMPLES: usize = 64;
 
 const MB_ITERS: usize = 20;
 
 fn setup() -> (CameraHandle, World) {
     let mut materials = MaterialStore::new();
 
-    // let grey = materials.add_material(Dielectric::new(
-    //     WSrgb::new_splat(0.3, 0.3, 0.3),
-    //     f32x4::from(0.1),
-    // ));
-
-    let pink = materials.add_material(Lambertian::new(WSrgb::new_splat(0.75, 0.5, 0.55)));
-
-    // let pink = materials.add_material(Metallic::new(
-    //     WSrgb::new_splat(0.75, 0.5, 0.55),
-    //     f32x4::from(0.0),
-    // ));
+    let grey = materials.add_material(Dielectric::new_remap(
+        Srgb::new(0.3, 0.3, 0.3),
+        0.4,
+    ));
 
     let sky = materials.add_material(Sky {});
 
@@ -59,67 +52,50 @@ fn setup() -> (CameraHandle, World) {
 
     hitables.push(TracedSDF::new(
         MandelBox::new(MB_ITERS, BoxFold::new(1.0), SphereFold::new(0.5, 1.0), -2.0),
-        pink,
+        grey,
     ));
 
     let mut lights: Vec<Box<dyn Light>> = Vec::new();
 
-    let white = Srgb::new(4.0, 3.0, 2.5) * 20000.00;
-    let blue = Srgb::new(1.5, 2.5, 5.0) * 2.25;
-    let pink = Srgb::new(4.5, 2.0, 3.0) * 2.25;
+    let sun = Srgb::new(4.0, 3.0, 2.5) * 45000.0;
+    let blue = Srgb::new(1.5, 2.5, 5.0) * 8.0;
+    let pink = Srgb::new(4.5, 2.0, 3.0) * 8.0;
 
     lights.push(Box::new(SphereLight::new(
-        Vec3::new(0.0, 1.0, 2.65) * 50.0,
-        10.0,
-        white,
+        Vec3::new(2.65, 2.0, -1.0) * 50.0,
+        1.0,
+        sun,
     )));
 
     // lights.push(Box::new(SphereLight::new(
-    //     Vec3::new(1.5, -0.35, 1.95),
-    //     0.1,
-    //     blue,
+    //     Vec3::new(-1.0, 2.0, 2.65) * 50.0,
+    //     1.0,
+    //     sun,
     // )));
 
-    // lights.push(Box::new(SphereLight::new(
-    //     Vec3::new(1.5, 0.35, 1.95),
-    //     0.1,
-    //     pink,
-    // )));
+    lights.push(Box::new(SphereLight::new(
+        Vec3::new(1.5, -0.35, 1.95),
+        0.1,
+        blue,
+    )));
 
-    // lights.push(Box::new(SphereLight::new(
-    //     Vec3::new(-1.5, -0.35, 1.95),
-    //     0.1,
-    //     blue,
-    // )));
+    lights.push(Box::new(SphereLight::new(
+        Vec3::new(1.5, 0.35, 1.95),
+        0.1,
+        pink,
+    )));
 
-    // lights.push(Box::new(SphereLight::new(
-    //     Vec3::new(-1.5, 0.35, 1.95),
-    //     0.1,
-    //     pink,
-    // )));
+    lights.push(Box::new(SphereLight::new(
+        Vec3::new(-1.5, -0.35, 1.95),
+        0.1,
+        blue,
+    )));
 
-    // 3
-    // let camera = ThinLensCamera::new(
-    //     RES.0 as f32 / RES.1 as f32,
-    //     60.0,
-    //     // 0.002,
-    //     0.00001,
-    //     Vec3::new(5.6, 1.32, 6.075),
-    //     Vec3::new(5.5, 1.575, 6.0),
-    //     Vec3::new(0.25, 0.0, 1.0).normalized(),
-    //     Vec3::new(5.5, 1.43, 6.0),
-    // );
-
-    // 2
-    // let camera = ThinLensCamera::new(
-    //     RES.0 as f32 / RES.1 as f32,
-    //     60.0,
-    //     0.0001,
-    //     Vec3::new(7.25, -0.5, 9.0),
-    //     Vec3::new(5.0, 2.25, 6.0),
-    //     Vec3::new(0.0, 1.0, 0.0),
-    //     Vec3::new(5.0, 2.25, 6.0),
-    // );
+    lights.push(Box::new(SphereLight::new(
+        Vec3::new(-1.5, 0.35, 1.95),
+        0.1,
+        pink,
+    )));
 
     // 1
     let camera = ThinLensCamera::new(
@@ -170,7 +146,7 @@ fn main() {
     let frame_range = 0..1;
     let shutter_speed = 1.0 / 24.0;
 
-    let filter = BlackmanHarrisFilter::new(2.0);
+    let filter = BlackmanHarrisFilter::new(1.5);
     // let filter = BoxFilter::default();
     let integrator = PathTracingIntegrator { max_bounces: 5 };
 

@@ -129,7 +129,7 @@ macro_rules! channel_storage_index {
 }
 
 pub struct Tile<N: ArrayLength<ChannelTileStorage>> {
-    index: usize,
+    _index: usize,
     epoch: usize,
     channels: GenericArray<ChannelTileStorage, N>,
     raster_bounds: Aabru,
@@ -139,7 +139,7 @@ pub struct Tile<N: ArrayLength<ChannelTileStorage>> {
 
 impl<N: ArrayLength<ChannelTileStorage>> Tile<N> {
     pub fn new<IC>(
-        index: usize,
+        _index: usize,
         epoch: usize,
         channels: IC,
         res: Extent2u,
@@ -151,7 +151,7 @@ impl<N: ArrayLength<ChannelTileStorage>> Tile<N> {
         let screen_to_ndc_size = Vec2::new(1.0 / res.w as f32, 1.0 / res.h as f32);
 
         Tile {
-            index,
+            _index,
             epoch,
             channels: GenericArray::from_exact_iter(
                 channels.map(|kind| ChannelTileStorage::new(kind, raster_bounds.size())),

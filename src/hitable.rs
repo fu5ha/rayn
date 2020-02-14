@@ -154,10 +154,6 @@ impl ::std::ops::Deref for HitableStore {
 
 impl HitableStore {
     pub fn test_occluded(&self, start: Wec3, end: Wec3, time: f32x4) -> f32x4 {
-        let dir = end - start;
-        let dist = dir.mag();
-        let dir = dir / dist;
-
         self.iter().fold(f32x4::ONE, |acc, hitable| {
             acc * hitable.occluded(start, end, time)
         })

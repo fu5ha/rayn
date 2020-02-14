@@ -3,12 +3,16 @@ use bumpalo::Bump;
 use arrayref::array_ref;
 
 use crate::hitable::WShadingPoint;
-use crate::math::{f32x4, f_schlick, f_schlick_c, OrthonormalBasis, RandomSample3d, Wec3};
-use crate::spectrum::WSrgb;
+use crate::math::{f32x4, f_schlick, OrthonormalBasis, RandomSample3d, Wec3};
+use crate::spectrum::{Srgb, WSrgb};
 
 use std::f32::consts::PI;
 
 pub trait BSDF {
+    fn receives_light(&self) -> bool {
+        true
+    }
+
     fn scatter(
         &self,
         wo: Wec3,
@@ -106,7 +110,7 @@ impl BSDF for LambertianBSDF {
         &self,
         _wo: Wec3,
         intersection: &WShadingPoint,
-        samples_1d: f32x4,
+        _samples_1d: f32x4,
         samples_2d: &[f32x4; 4],
     ) -> Option<WScatteringEvent> {
         let diffuse_sample = Wec3::cosine_weighted_in_hemisphere(array_ref![samples_2d, 0, 2]);
@@ -140,10 +144,24 @@ pub struct Dielectric<AG, RG> {
 }
 
 impl<AG, RG> Dielectric<AG, RG> {
+    #[allow(dead_code)]
     pub fn new(albedo_gen: AG, roughness_gen: RG) -> Self {
         Self {
             albedo_gen,
             roughness_gen,
+        }
+    }
+}
+
+impl Dielectric<WSrgb, f32x4> {
+    /// Roughness should be between 0.0 (smooth) and 1.0 (rough)
+    pub fn new_remap(albedo: Srgb, roughness: f32) -> Self {
+        let roughness = 1.0 - roughness;
+        let roughness = 1.0 + roughness * roughness * roughness * roughness * 300.0;
+        
+        Self {
+            albedo_gen: WSrgb::splat(albedo),
+            roughness_gen: f32x4::from(roughness),
         }
     }
 }
@@ -167,13 +185,13 @@ where
 
 impl BSDF for DielectricBSDF {
     fn f(&self, wo: Wec3, wi: Wec3, n: Wec3) -> WSrgb {
-        let dot = wi.dot(wo).abs();
+        let dot = f32x4::ZERO.max(wi.dot(n));
         let fresnel = f_schlick(dot, f32x4::from(0.04));
-        let reflection = wo.reflected(n);
-        let cos_alpha = wi.dot(reflection).powf(self.roughness);
+        let half = (wo + wi).normalized();
+        let cos_alpha = f32x4::ZERO.max(half.dot(n)).powf(self.roughness);
         let two = f32x4::from(2.0);
         let spec_factor = cos_alpha * (self.roughness + two) / (two * f32x4::PI);
-        let spec_f = WSrgb::one() * spec_factor * fresnel;
+        let spec_f = WSrgb::one() * spec_factor * fresnel / wi.dot(n).abs();
         let diffuse_f = self.albedo / f32x4::PI * (f32x4::ONE - fresnel);
         spec_f + diffuse_f
     }
@@ -216,7 +234,7 @@ impl BSDF for DielectricBSDF {
         let spec_coeff = (self.roughness + two) / f32x4::TWO_PI * cos_alpha_pow;
         let below_horizon = norm.dot(spec_bounce).cmp_lt(f32x4::ZERO);
         let spec_coeff = f32x4::merge(below_horizon, f32x4::ZERO, spec_coeff);
-        let spec_f = WSrgb::one() * spec_coeff;
+        let spec_f = WSrgb::one() * spec_coeff / cos;
 
         // merge by fresnel
 
@@ -384,8 +402,12 @@ impl Material for Sky {
 pub struct SkyBSDF {}
 
 impl BSDF for SkyBSDF {
+    fn receives_light(&self) -> bool {
+        false
+    }
+
     fn f(&self, _: Wec3, _: Wec3, _: Wec3) -> WSrgb {
-        WSrgb::zero()
+        panic!()
     }
 
     fn scatter(
@@ -413,6 +435,7 @@ pub struct Emissive<EG> {
 }
 
 impl<EG> Emissive<EG> {
+    #[allow(dead_code)]
     pub fn new(emission_gen: EG) -> Self {
         Self { emission_gen }
     }
@@ -446,6 +469,10 @@ impl<I> BSDF for EmissiveBSDF<I>
 where
     I: BSDF,
 {
+    fn receives_light(&self) -> bool {
+        false
+    }
+
     fn f(&self, _: Wec3, _: Wec3, _: Wec3) -> WSrgb {
         WSrgb::zero()
     }

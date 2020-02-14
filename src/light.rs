@@ -1,4 +1,4 @@
-use crate::math::{concentric_circle_map_polar, f32x4, OrthonormalBasis, Vec3, Wec3};
+use crate::math::{f32x4, OrthonormalBasis, Vec3, Wec3};
 use crate::spectrum::{Srgb, WSrgb};
 
 pub trait Light: Send + Sync {
@@ -11,7 +11,6 @@ pub struct SphereLight {
     pos: Wec3,
     emission: WSrgb,
     rad: f32x4,
-    surface_area: f32x4,
 }
 
 impl SphereLight {
@@ -20,13 +19,12 @@ impl SphereLight {
             pos: Wec3::splat(pos),
             emission: WSrgb::splat(emission),
             rad: f32x4::from(rad),
-            surface_area: f32x4::from(4.0 * std::f32::consts::PI * rad * rad / 3.0),
         }
     }
 }
 
 impl Light for SphereLight {
-    fn sample(&self, samples: &[f32x4; 2], p: Wec3, n: Wec3) -> (Wec3, WSrgb, f32x4) {
+    fn sample(&self, samples: &[f32x4; 2], p: Wec3, _n: Wec3) -> (Wec3, WSrgb, f32x4) {
         let dir = self.pos - p;
         let dist2 = dir.mag_sq();
         let dist = dist2.sqrt();

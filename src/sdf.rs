@@ -6,6 +6,7 @@ use crate::ray::WRay;
 use sdfu::*;
 
 const MAX_MARCHES: u32 = 1000;
+const MAX_VIS_MARCHES: u32 = 100;
 
 pub struct TracedSDF<S> {
     sdf: S,
@@ -20,30 +21,35 @@ impl<S> TracedSDF<S> {
 
 impl<S: SDF<f32x4, Wec3> + Send + Sync> Hitable for TracedSDF<S> {
     // return 1.0 for not occluded, 0.0 for occluded
-    fn occluded(&self, start: Wec3, end: Wec3, time: f32x4) -> f32x4 {
+    fn occluded(&self, start: Wec3, end: Wec3, _time: f32x4) -> f32x4 {
         let dir = end - start;
         let max_dist = dir.mag();
         let dir = dir / max_dist;
 
         let dist = self.sdf.dist(start).abs();
+
+        let nan_mask = dist.cmp_nan(dist);
+        let gt_mask = dist.cmp_gt(max_dist);
+        let mut gt_nan_mask = gt_mask | nan_mask;
+
+        let mut hit_mask = dist.cmp_lt(f32x4::from(0.0001));
         let mut t = dist;
-        let nan_mask = t.cmp_nan(t);
-        for _march in 0..MAX_MARCHES {
+        for _march in 0..MAX_VIS_MARCHES {
             let gt_mask = t.cmp_gt(max_dist);
-            let gt_nan_mask = gt_mask | nan_mask;
+            gt_nan_mask = gt_mask | nan_mask;
             if gt_nan_mask.move_mask() == 0b1111 {
                 break;
             }
             let point = dir.mul_add(Wec3::broadcast(t), start);
             let dist = self.sdf.dist(point).abs();
-            let hit_mask = dist.cmp_lt(f32x4::from(0.001));
+            hit_mask = dist.cmp_lt(f32x4::from(0.0001));
             let hit_gt_nan_mask = hit_mask | gt_nan_mask;
-            t = f32x4::merge(hit_gt_nan_mask, t, t + dist);
             if hit_gt_nan_mask.move_mask() == 0b1111 {
-                return f32x4::merge(hit_mask & !gt_nan_mask, f32x4::ZERO, f32x4::ONE);
+                break;
             }
+            t = f32x4::merge(hit_gt_nan_mask, t, t + dist);
         }
-        f32x4::ONE
+        f32x4::merge(hit_mask & !gt_nan_mask, f32x4::ZERO, f32x4::ONE)
     }
 
     fn hit(&self, ray: &WRay, t_range: ::std::ops::Range<f32x4>) -> f32x4 {

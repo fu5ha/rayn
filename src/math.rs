@@ -98,6 +98,7 @@ pub fn f_schlick(cos: f32x4, f0: f32x4) -> f32x4 {
     f0 + (f32x4::ONE - f0) * (f32x4::ONE - cos).powi([5, 5, 5, 5])
 }
 
+#[allow(dead_code)]
 pub fn f_schlick_c(cos: f32x4, f0: WSrgb) -> WSrgb {
     f0 + (WSrgb::one() - f0) * (f32x4::ONE - cos).powi([5, 5, 5, 5])
 }
@@ -165,6 +166,7 @@ impl CDF {
 }
 
 #[inline]
+#[allow(dead_code)]
 pub fn power_heuristic(n_samples_f: usize, f_pdf: f32, n_samples_g: usize, g_pdf: f32) -> f32 {
     let f = n_samples_f as f32 * f_pdf;
     let g = n_samples_g as f32 * g_pdf;
@@ -179,14 +181,13 @@ pub fn concentric_circle_map_polar(uv: &[f32x4; 2], radius: f32x4) -> (f32x4, f3
     let r1 = radius * a;
     let r2 = radius * b;
     let phi1 = f32x4::FRAC_PI_4 * b / a;
-    let phi1 = f32x4::FRAC_PI_2 - f32x4::FRAC_PI_4 * a / b;
+    let phi2 = f32x4::FRAC_PI_2 - f32x4::FRAC_PI_4 * a / b;
     let mask = (a * a).cmp_gt(b * b);
     let r = f32x4::merge(r1, r2, mask);
-    let phi = f32x4::merge(phi1, phi1, mask);
+    let phi = f32x4::merge(phi1, phi2, mask);
     (r, phi)
 }
 
-#[inline]
 pub fn concentric_circle_map(uv: &[f32x4; 2], radius: f32x4) -> Wec2 {
     let (r, phi) = concentric_circle_map_polar(uv, radius);
     let (s, c) = phi.sin_cos();

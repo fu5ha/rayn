@@ -2,10 +2,9 @@ use bumpalo::collections::Vec as BumpVec;
 use bumpalo::Bump;
 
 use crate::film::ChannelSample;
-use crate::hitable::{HitableStore, WShadingPoint};
-use crate::light::Light;
+use crate::hitable::WShadingPoint;
 use crate::material::{MaterialHandle, BSDF};
-use crate::math::{f32x4, Vec2u, Vec3, Wec3};
+use crate::math::{f32x4, Vec2u, Vec3};
 use crate::ray::Ray;
 use crate::spectrum::{Srgb, WSrgb};
 use crate::world::World;
@@ -62,21 +61,21 @@ impl Integrator for PathTracingIntegrator {
 
         intersection.ray.radiance += bsdf.le(-wi, &intersection) * intersection.ray.throughput;
 
-        if world.lights.len() > 0 {
+        if bsdf.receives_light() && world.lights.len() > 0 {
             let lights = (samples_1d[0] * f32x4::from(world.lights.len() as f32)).floor();
 
-            let mut lights = lights.as_ref().iter().map(|i| *i as usize);
+            let lights = lights.as_ref().iter().map(|i| *i as usize);
 
-            // for light_idx in lights {
-            let light_idx = lights.next().unwrap();
-            intersection.ray.radiance += sample_one_light(
-                world,
-                light_idx,
-                arrayref::array_ref![samples_2d, 0 + light_idx * 2, 2],
-                &intersection,
-                bsdf,
-            );
-            // }
+            for (i, light_idx) in lights.enumerate() {
+            // let (i, light_idx) = (0, lights.next().unwrap());
+                intersection.ray.radiance += sample_one_light(
+                    world,
+                    light_idx,
+                    arrayref::array_ref![samples_2d, 0 + i * 2, 2],
+                    &intersection,
+                    bsdf,
+                );
+            }
         }
 
         let scattering_event = bsdf.scatter(
@@ -158,15 +157,18 @@ pub fn sample_one_light(
     intersection: &WShadingPoint,
     bsdf: &dyn BSDF,
 ) -> WSrgb {
-    let (end_point, light_f, pdf) =
+    let (end_point, li, pdf) =
         world.lights[light_idx].sample(samples, intersection.point, intersection.normal);
-    println!("{:#?}", pdf);
-    // let occluded =
-    //     world
-    //         .hitables
-    //         .test_occluded(intersection.point, end_point, intersection.ray.time);
+
     let wo = -intersection.ray.dir;
     let wi = (end_point - intersection.point).normalized();
-    let f = bsdf.f(wo, wi, intersection.normal);
-    light_f * f * f32x4::from(world.lights.len() as f32) / pdf * intersection.ray.throughput
+
+    let occlude_point = intersection.point + intersection.normal * intersection.normal.dot(wi).signum() * intersection.offset_by;
+    let occluded =
+        world
+            .hitables
+            .test_occluded(occlude_point, end_point, intersection.ray.time);
+
+    let f = bsdf.f(wo, wi, intersection.normal) * intersection.normal.dot(wi).max(f32x4::ZERO);
+    li * f * f32x4::from(world.lights.len() as f32 / 4.0) / pdf * intersection.ray.throughput * occluded
 }
