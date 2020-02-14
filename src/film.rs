@@ -546,45 +546,101 @@ impl<'a, N: ArrayLength<ChannelStorage> + ArrayLength<ChannelTileStorage>> Film<
                 hit_store.process_hits(&world.hitables, &mut wintersections);
 
                 for (mat_id, wshading_point) in wintersections.drain(..) {
-                    let samples = [
+                    let samples_1d = [
                         sample_sets.wide_sample_1d_array(
                             wshading_point.ray.sample,
                             wshading_point.ray.scramble,
-                            1 + depth * 2,
+                            1 + depth * 3,
                         ),
+                        sample_sets.wide_sample_1d_array(
+                            wshading_point.ray.sample,
+                            wshading_point.ray.scramble,
+                            2 + depth * 3,
+                        ),
+                        sample_sets.wide_sample_1d_array(
+                            wshading_point.ray.sample,
+                            wshading_point.ray.scramble,
+                            3 + depth * 3,
+                        ),
+                    ];
+                    let samples_2d = [
                         sample_sets.wide_sample_2d_array(
                             0,
                             wshading_point.ray.sample,
                             wshading_point.ray.scramble,
-                            2 + depth * 2,
+                            2 + depth * 6,
                         ),
                         sample_sets.wide_sample_2d_array(
                             1,
                             wshading_point.ray.sample,
                             wshading_point.ray.scramble,
-                            2 + depth * 2,
+                            2 + depth * 6,
                         ),
                         sample_sets.wide_sample_2d_array(
                             0,
                             wshading_point.ray.sample,
                             wshading_point.ray.scramble,
-                            3 + depth * 2,
+                            3 + depth * 6,
                         ),
                         sample_sets.wide_sample_2d_array(
                             1,
                             wshading_point.ray.sample,
                             wshading_point.ray.scramble,
-                            3 + depth * 2,
+                            3 + depth * 6,
                         ),
-                        sample_sets.wide_sample_1d_array(
+                        sample_sets.wide_sample_2d_array(
+                            0,
                             wshading_point.ray.sample,
                             wshading_point.ray.scramble,
-                            2 + depth * 2,
+                            4 + depth * 6,
+                        ),
+                        sample_sets.wide_sample_2d_array(
+                            1,
+                            wshading_point.ray.sample,
+                            wshading_point.ray.scramble,
+                            4 + depth * 6,
+                        ),
+                        sample_sets.wide_sample_2d_array(
+                            0,
+                            wshading_point.ray.sample,
+                            wshading_point.ray.scramble,
+                            5 + depth * 6,
+                        ),
+                        sample_sets.wide_sample_2d_array(
+                            1,
+                            wshading_point.ray.sample,
+                            wshading_point.ray.scramble,
+                            5 + depth * 6,
+                        ),
+                        sample_sets.wide_sample_2d_array(
+                            0,
+                            wshading_point.ray.sample,
+                            wshading_point.ray.scramble,
+                            6 + depth * 6,
+                        ),
+                        sample_sets.wide_sample_2d_array(
+                            1,
+                            wshading_point.ray.sample,
+                            wshading_point.ray.scramble,
+                            6 + depth * 6,
+                        ),
+                        sample_sets.wide_sample_2d_array(
+                            0,
+                            wshading_point.ray.sample,
+                            wshading_point.ray.scramble,
+                            7 + depth * 6,
+                        ),
+                        sample_sets.wide_sample_2d_array(
+                            1,
+                            wshading_point.ray.sample,
+                            wshading_point.ray.scramble,
+                            7 + depth * 6,
                         ),
                     ];
                     integrator.integrate(
                         world,
-                        &samples,
+                        &samples_1d,
+                        &samples_2d,
                         depth,
                         mat_id,
                         wshading_point,

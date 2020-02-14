@@ -2,11 +2,12 @@ use bumpalo::collections::Vec as BumpVec;
 use bumpalo::Bump;
 
 use crate::film::ChannelSample;
-use crate::hitable::WShadingPoint;
-use crate::material::MaterialHandle;
-use crate::math::{f32x4, Vec2u, Vec3};
+use crate::hitable::{HitableStore, WShadingPoint};
+use crate::light::Light;
+use crate::material::{MaterialHandle, BSDF};
+use crate::math::{f32x4, Vec2u, Vec3, Wec3};
 use crate::ray::Ray;
-use crate::spectrum::Srgb;
+use crate::spectrum::{Srgb, WSrgb};
 use crate::world::World;
 
 pub trait Integrator: Send + Sync {
@@ -14,7 +15,8 @@ pub trait Integrator: Send + Sync {
     fn integrate(
         &self,
         world: &World,
-        rng: &[f32x4; 6],
+        samples_1d: &[f32x4; 3],
+        samples_2d: &[f32x4; 12],
         depth: usize,
         material: MaterialHandle,
         intersection: WShadingPoint,
@@ -34,17 +36,18 @@ pub struct PathTracingIntegrator {
 
 impl Integrator for PathTracingIntegrator {
     fn requested_1d_sample_sets(&self) -> usize {
-        (self.max_bounces + 1) * 2
+        (self.max_bounces + 1) * 3
     }
 
     fn requested_2d_sample_sets(&self) -> usize {
-        (self.max_bounces + 1) * 2
+        (self.max_bounces + 1) * 6
     }
 
     fn integrate(
         &self,
         world: &World,
-        samples: &[f32x4; 6],
+        samples_1d: &[f32x4; 3],
+        samples_2d: &[f32x4; 12],
         depth: usize,
         material: MaterialHandle,
         mut intersection: WShadingPoint,
@@ -59,7 +62,29 @@ impl Integrator for PathTracingIntegrator {
 
         intersection.ray.radiance += bsdf.le(-wi, &intersection) * intersection.ray.throughput;
 
-        let scattering_event = bsdf.scatter(wi, &intersection, arrayref::array_ref![samples, 0, 5]);
+        if world.lights.len() > 0 {
+            let lights = (samples_1d[0] * f32x4::from(world.lights.len() as f32)).floor();
+
+            let mut lights = lights.as_ref().iter().map(|i| *i as usize);
+
+            // for light_idx in lights {
+            let light_idx = lights.next().unwrap();
+            intersection.ray.radiance += sample_one_light(
+                world,
+                light_idx,
+                arrayref::array_ref![samples_2d, 0 + light_idx * 2, 2],
+                &intersection,
+                bsdf,
+            );
+            // }
+        }
+
+        let scattering_event = bsdf.scatter(
+            wi,
+            &intersection,
+            samples_1d[2],
+            arrayref::array_ref![samples_2d, 8, 4],
+        );
 
         if let Some(se) = scattering_event {
             let ndl = se.wi.dot(intersection.normal).abs();
@@ -94,7 +119,7 @@ impl Integrator for PathTracingIntegrator {
                 .iter_mut()
                 .zip(throughputs.iter())
                 .zip(roulette_factor.as_ref().iter())
-                .zip(samples[5].as_ref().iter())
+                .zip(samples_1d[2].as_ref().iter())
             {
                 if ray.valid {
                     if depth >= self.max_bounces || *roulette_sample < *roulette_factor {
@@ -124,4 +149,24 @@ impl Integrator for PathTracingIntegrator {
             }
         }
     }
+}
+
+pub fn sample_one_light(
+    world: &World,
+    light_idx: usize,
+    samples: &[f32x4; 2],
+    intersection: &WShadingPoint,
+    bsdf: &dyn BSDF,
+) -> WSrgb {
+    let (end_point, light_f, pdf) =
+        world.lights[light_idx].sample(samples, intersection.point, intersection.normal);
+    println!("{:#?}", pdf);
+    // let occluded =
+    //     world
+    //         .hitables
+    //         .test_occluded(intersection.point, end_point, intersection.ray.time);
+    let wo = -intersection.ray.dir;
+    let wi = (end_point - intersection.point).normalized();
+    let f = bsdf.f(wo, wi, intersection.normal);
+    light_f * f * f32x4::from(world.lights.len() as f32) / pdf * intersection.ray.throughput
 }

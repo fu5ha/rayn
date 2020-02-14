@@ -13,8 +13,11 @@ pub trait BSDF {
         &self,
         wo: Wec3,
         intersection: &WShadingPoint,
-        samples: &[f32x4; 5],
+        samples_1d: f32x4,
+        samples_2d: &[f32x4; 4],
     ) -> Option<WScatteringEvent>;
+
+    fn f(&self, wo: Wec3, wi: Wec3, n: Wec3) -> WSrgb;
 
     fn le(&self, _wo: Wec3, _intersection: &WShadingPoint) -> WSrgb {
         WSrgb::zero()
@@ -34,7 +37,6 @@ pub struct WScatteringEvent {
     pub wi: Wec3,
     pub f: WSrgb,
     pub pdf: f32x4,
-    pub specular: f32x4,
 }
 
 #[derive(Clone, Copy, Debug)]
@@ -104,19 +106,25 @@ impl BSDF for LambertianBSDF {
         &self,
         _wo: Wec3,
         intersection: &WShadingPoint,
-        samples: &[f32x4; 5],
+        samples_1d: f32x4,
+        samples_2d: &[f32x4; 4],
     ) -> Option<WScatteringEvent> {
-        let diffuse_sample = Wec3::cosine_weighted_in_hemisphere(array_ref![samples,0,2], f32x4::ONE);
+        let diffuse_sample = Wec3::cosine_weighted_in_hemisphere(array_ref![samples_2d, 0, 2]);
         let diffuse_bounce = (intersection.basis * diffuse_sample).normalized();
-        let diffuse_pdf = diffuse_sample.dot(Wec3::unit_z()) / f32x4::from(PI);
+        // in this case diffuse_sample.z = diffuse_sample.dot(Wec3::unit_z())
+        // because using intersection coordinate system basis
+        let diffuse_pdf = diffuse_sample.z / f32x4::from(PI);
         let diffuse_f = self.albedo / f32x4::from(PI);
 
         Some(WScatteringEvent {
             wi: diffuse_bounce,
             f: diffuse_f,
             pdf: diffuse_pdf,
-            specular: f32x4::ZERO,
         })
+    }
+
+    fn f(&self, _wi: Wec3, _wo: Wec3, _n: Wec3) -> WSrgb {
+        self.albedo / f32x4::PI
     }
 }
 
@@ -158,33 +166,61 @@ where
 }
 
 impl BSDF for DielectricBSDF {
+    fn f(&self, wo: Wec3, wi: Wec3, n: Wec3) -> WSrgb {
+        let dot = wi.dot(wo).abs();
+        let fresnel = f_schlick(dot, f32x4::from(0.04));
+        let reflection = wo.reflected(n);
+        let cos_alpha = wi.dot(reflection).powf(self.roughness);
+        let two = f32x4::from(2.0);
+        let spec_factor = cos_alpha * (self.roughness + two) / (two * f32x4::PI);
+        let spec_f = WSrgb::one() * spec_factor * fresnel;
+        let diffuse_f = self.albedo / f32x4::PI * (f32x4::ONE - fresnel);
+        spec_f + diffuse_f
+    }
+
     fn scatter(
         &self,
         wo: Wec3,
         intersection: &WShadingPoint,
-        samples: &[f32x4; 5],
+        samples_1d: f32x4,
+        samples_2d: &[f32x4; 4],
     ) -> Option<WScatteringEvent> {
         let norm = intersection.normal;
         let cos = norm.dot(-wo).abs();
+        let two = f32x4::from(2.0);
+
+        let fresnel = f_schlick(cos, f32x4::from(0.04));
 
         // diffuse part
-        let diffuse_sample = Wec3::cosine_weighted_in_hemisphere(array_ref![samples,0,2], f32x4::ONE);
+        let diffuse_sample = Wec3::cosine_weighted_in_hemisphere(array_ref![samples_2d, 0, 2]);
         let diffuse_bounce = (intersection.basis * diffuse_sample).normalized();
-        let diffuse_pdf = diffuse_sample.dot(Wec3::unit_z()) / f32x4::from(PI);
+        // in this case diffuse_sample.z = diffuse_sample.dot(Wec3::unit_z())
+        // because using intersection coordinate system basis
+        let diffuse_pdf = diffuse_sample.z / f32x4::from(PI);
         let diffuse_f = self.albedo / f32x4::from(PI);
 
         // spec part
-        let spec_sample = Wec3::cosine_weighted_in_hemisphere(array_ref![samples,0,2], self.roughness);
+        let spec_sample = Wec3::cosine_power_weighted(array_ref![samples_2d, 2, 2], self.roughness);
+
         let reflection = wo.reflected(norm);
         let basis = reflection.get_orthonormal_basis();
+
         let spec_bounce = (basis * spec_sample).normalized();
-        let spec_pdf = spec_sample.dot(Wec3::unit_z()) / f32x4::from(PI);
-        let spec_f = WSrgb::one() / spec_bounce.dot(norm).abs() / f32x4::from(PI);
+
+        // in this case spec_sample.z = spec_sample.dot(Wec3::unit_z()) = cos_alpha
+        // because using reflection coordinate system basis
+        let cos_alpha_pow = spec_sample.z.powf(self.roughness);
+
+        let spec_pdf = (self.roughness + f32x4::ONE) / f32x4::TWO_PI * cos_alpha_pow;
+
+        let spec_coeff = (self.roughness + two) / f32x4::TWO_PI * cos_alpha_pow;
+        let below_horizon = norm.dot(spec_bounce).cmp_lt(f32x4::ZERO);
+        let spec_coeff = f32x4::merge(below_horizon, f32x4::ZERO, spec_coeff);
+        let spec_f = WSrgb::one() * spec_coeff;
 
         // merge by fresnel
-        let fresnel = f_schlick(cos, f32x4::from(0.04));
 
-        let fresnel_sample = f32x4::from(samples[4]);
+        let fresnel_sample = f32x4::from(samples_1d);
 
         let fresnel_mask = fresnel_sample.cmp_lt(fresnel);
 
@@ -192,73 +228,74 @@ impl BSDF for DielectricBSDF {
             wi: Wec3::merge(fresnel_mask, spec_bounce, diffuse_bounce),
             f: WSrgb::merge(fresnel_mask, spec_f, diffuse_f),
             pdf: f32x4::merge(fresnel_mask, spec_pdf, diffuse_pdf),
-            specular: f32x4::merge(fresnel_mask, f32x4::ONE, f32x4::ZERO),
         })
     }
 }
 
-#[allow(dead_code)]
-pub struct Metallic<FG, RG> {
-    pub f0_gen: FG,
-    pub roughness_gen: RG,
-}
+// #[allow(dead_code)]
+// pub struct Metallic<FG, RG> {
+//     pub f0_gen: FG,
+//     pub roughness_gen: RG,
+// }
 
-impl<FG, RG> Metallic<FG, RG> {
-    #[allow(dead_code)]
-    pub fn new(f0_gen: FG, roughness_gen: RG) -> Self {
-        Self {
-            f0_gen,
-            roughness_gen,
-        }
-    }
-}
+// impl<FG, RG> Metallic<FG, RG> {
+//     #[allow(dead_code)]
+//     pub fn new(f0_gen: FG, roughness_gen: RG) -> Self {
+//         Self {
+//             f0_gen,
+//             roughness_gen,
+//         }
+//     }
+// }
 
-impl<AG, RG> Material for Metallic<AG, RG>
-where
-    AG: WShadingParamGenerator<WSrgb> + Send + Sync,
-    RG: WShadingParamGenerator<f32x4> + Send + Sync,
-{
-    fn get_bsdf_at<'bump>(
-        &self,
-        intersection: &WShadingPoint,
-        bump: &'bump Bump,
-    ) -> &'bump mut dyn BSDF {
-        bump.alloc_with(|| MetallicBSDF {
-            f0: self.f0_gen.gen(intersection),
-            roughness: self.roughness_gen.gen(intersection),
-        })
-    }
-}
+// impl<AG, RG> Material for Metallic<AG, RG>
+// where
+//     AG: WShadingParamGenerator<WSrgb> + Send + Sync,
+//     RG: WShadingParamGenerator<f32x4> + Send + Sync,
+// {
+//     fn get_bsdf_at<'bump>(
+//         &self,
+//         intersection: &WShadingPoint,
+//         bump: &'bump Bump,
+//     ) -> &'bump mut dyn BSDF {
+//         bump.alloc_with(|| MetallicBSDF {
+//             f0: self.f0_gen.gen(intersection),
+//             roughness: self.roughness_gen.gen(intersection),
+//         })
+//     }
+// }
 
-#[derive(Clone, Copy)]
-pub struct MetallicBSDF {
-    f0: WSrgb,
-    roughness: f32x4,
-}
+// #[derive(Clone, Copy)]
+// pub struct MetallicBSDF {
+//     f0: WSrgb,
+//     roughness: f32x4,
+// }
 
-impl BSDF for MetallicBSDF {
-    // samples must contain at least two samples.
-    fn scatter(
-        &self,
-        wo: Wec3,
-        intersection: &WShadingPoint,
-        samples: &[f32x4; 5],
-    ) -> Option<WScatteringEvent> {
-        let sample = unsafe { Wec3::cosine_weighted_in_hemisphere(array_ref![samples,0,2], self.roughness) };
-        let reflection = wo.reflected(intersection.normal);
-        let basis = reflection.get_orthonormal_basis();
-        let bounce = basis * sample;
-        let pdf = sample.dot(Wec3::unit_z()) / f32x4::from(PI);
-        let cos = bounce.dot(intersection.normal).abs();
-        let f = f_schlick_c(cos, self.f0) / cos / f32x4::from(PI);
-        Some(WScatteringEvent {
-            wi: bounce.normalized(),
-            f,
-            pdf,
-            specular: f32x4::ONE,
-        })
-    }
-}
+// impl BSDF for MetallicBSDF {
+//     // samples must contain at least two samples.
+//     fn scatter(
+//         &self,
+//         wo: Wec3,
+//         intersection: &WShadingPoint,
+//         samples_1d: f32x4,
+//         samples_2d: &[f32x4; 4],
+//     ) -> Option<WScatteringEvent> {
+//         let sample = unsafe {
+//             Wec3::cosine_weighted_in_hemisphere(array_ref![samples_2d, 0, 2], self.roughness)
+//         };
+//         let reflection = wo.reflected(intersection.normal);
+//         let basis = reflection.get_orthonormal_basis();
+//         let bounce = basis * sample;
+//         let pdf = sample.dot(Wec3::unit_z()) / f32x4::from(PI);
+//         let cos = bounce.dot(intersection.normal).abs();
+//         let f = f_schlick_c(cos, self.f0) / cos / f32x4::from(PI);
+//         Some(WScatteringEvent {
+//             wi: bounce.normalized(),
+//             f,
+//             pdf,
+//         })
+//     }
+// }
 
 // #[derive(Clone, Copy)]
 // pub struct Refractive<S> {
@@ -347,11 +384,16 @@ impl Material for Sky {
 pub struct SkyBSDF {}
 
 impl BSDF for SkyBSDF {
+    fn f(&self, _: Wec3, _: Wec3, _: Wec3) -> WSrgb {
+        WSrgb::zero()
+    }
+
     fn scatter(
         &self,
         _wo: Wec3,
         _intersection: &WShadingPoint,
-        _samples: &[f32x4; 5],
+        _samples_1d: f32x4,
+        _samples_2d: &[f32x4; 4],
     ) -> Option<WScatteringEvent> {
         None
     }
@@ -404,13 +446,18 @@ impl<I> BSDF for EmissiveBSDF<I>
 where
     I: BSDF,
 {
+    fn f(&self, _: Wec3, _: Wec3, _: Wec3) -> WSrgb {
+        WSrgb::zero()
+    }
+
     fn scatter(
         &self,
         wo: Wec3,
         intersection: &WShadingPoint,
-        samples: &[f32x4; 5],
+        samples_1d: f32x4,
+        samples_2d: &[f32x4; 4],
     ) -> Option<WScatteringEvent> {
-        self.inner.scatter(wo, intersection, samples)
+        self.inner.scatter(wo, intersection, samples_1d, samples_2d)
     }
 
     fn le(&self, _wo: Wec3, _intersection: &WShadingPoint) -> WSrgb {

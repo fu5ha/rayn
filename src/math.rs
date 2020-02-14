@@ -45,23 +45,19 @@ pub trait RandomSample2d {
 impl RandomSample2d for Wec2 {
     type Sample = [f32x4; 2];
     fn rand_in_unit_disk(samples: &Self::Sample) -> Self {
-        let rho = samples[0].sqrt();
-        let theta = samples[1] * f32x4::from(2f32 * PI);
-        let (sin, cos) = theta.sin_cos();
-        Wec2::new(rho * cos, rho * sin)
+        concentric_circle_map(samples, f32x4::ONE)
     }
 }
 
 pub trait RandomSample3d<T> {
-    type Sample;
-    fn rand_in_unit_sphere(samples: &Self::Sample) -> Self;
-    fn rand_on_unit_sphere(samples: &Self::Sample) -> Self;
-    fn cosine_weighted_in_hemisphere(samples: &Self::Sample, factor: T) -> Self;
+    fn rand_in_unit_sphere(samples: &[T; 2]) -> Self;
+    fn rand_on_unit_sphere(samples: &[T; 2]) -> Self;
+    fn cosine_weighted_in_hemisphere(samples: &[T; 2]) -> Self;
+    fn cosine_power_weighted(samples: &[T; 2], power: T) -> Self;
 }
 
 impl RandomSample3d<f32x4> for Wec3 {
-    type Sample = [f32x4; 2];
-    fn rand_in_unit_sphere(samples: &Self::Sample) -> Self {
+    fn rand_in_unit_sphere(samples: &[f32x4; 2]) -> Self {
         let theta = samples[0] * f32x4::from(2f32 * PI);
         let phi = samples[1] * f32x4::from(2.0) - f32x4::ONE;
         let ophisq = (f32x4::ONE - phi * phi).sqrt();
@@ -69,14 +65,26 @@ impl RandomSample3d<f32x4> for Wec3 {
         Wec3::new(ophisq * cos, ophisq * sin, phi)
     }
 
-    fn rand_on_unit_sphere(samples: &Self::Sample) -> Self {
+    fn rand_on_unit_sphere(samples: &[f32x4; 2]) -> Self {
         Self::rand_in_unit_sphere(samples).normalized()
     }
 
-    fn cosine_weighted_in_hemisphere(samples: &Self::Sample, constriction: f32x4) -> Self {
-        let xy = Wec2::rand_in_unit_disk(samples) * constriction;
+    // pdf: cos(theta) / pi
+    // in return coord space: ret.z / pi
+    fn cosine_weighted_in_hemisphere(samples: &[f32x4; 2]) -> Self {
+        let xy = Wec2::rand_in_unit_disk(samples);
         let z = (f32x4::ONE - xy.mag_sq()).sqrt();
         Wec3::new(xy.x, xy.y, z)
+    }
+
+    // pdf: (power+1)/ 2pi * cos^power(alpha)
+    fn cosine_power_weighted(samples: &[f32x4; 2], power: f32x4) -> Self {
+        let two = f32x4::from(2.0);
+        let a = samples[0].powf(f32x4::ONE / (power + f32x4::ONE));
+        let a2 = a * a;
+        let b = (f32x4::ONE - a2).sqrt();
+        let (s, c) = (two * samples[1]).sin_cos();
+        Wec3::new(b * c, b * s, a)
     }
 }
 
@@ -154,4 +162,33 @@ impl CDF {
         }
         None
     }
+}
+
+#[inline]
+pub fn power_heuristic(n_samples_f: usize, f_pdf: f32, n_samples_g: usize, g_pdf: f32) -> f32 {
+    let f = n_samples_f as f32 * f_pdf;
+    let g = n_samples_g as f32 * g_pdf;
+    f * f / (f * f + g * g)
+}
+
+// returns (r, phi)
+pub fn concentric_circle_map_polar(uv: &[f32x4; 2], radius: f32x4) -> (f32x4, f32x4) {
+    let two = f32x4::from(2.0);
+    let a = uv[0] * two - f32x4::ONE;
+    let b = uv[1] * two - f32x4::ONE;
+    let r1 = radius * a;
+    let r2 = radius * b;
+    let phi1 = f32x4::FRAC_PI_4 * b / a;
+    let phi1 = f32x4::FRAC_PI_2 - f32x4::FRAC_PI_4 * a / b;
+    let mask = (a * a).cmp_gt(b * b);
+    let r = f32x4::merge(r1, r2, mask);
+    let phi = f32x4::merge(phi1, phi1, mask);
+    (r, phi)
+}
+
+#[inline]
+pub fn concentric_circle_map(uv: &[f32x4; 2], radius: f32x4) -> Wec2 {
+    let (r, phi) = concentric_circle_map_polar(uv, radius);
+    let (s, c) = phi.sin_cos();
+    Wec2::new(r * c, r * s)
 }

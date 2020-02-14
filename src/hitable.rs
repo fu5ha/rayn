@@ -7,6 +7,8 @@ use bumpalo::Bump;
 
 pub trait Hitable: Send + Sync {
     fn hit(&self, rays: &WRay, t_ranges: ::std::ops::Range<f32x4>) -> f32x4;
+    // return 0 if occluded, 1 if not
+    fn occluded(&self, start: Wec3, end: Wec3, time: f32x4) -> f32x4;
     fn get_shading_info(&self, hits: WHit) -> (MaterialHandle, WShadingPoint);
 }
 
@@ -151,6 +153,16 @@ impl ::std::ops::Deref for HitableStore {
 }
 
 impl HitableStore {
+    pub fn test_occluded(&self, start: Wec3, end: Wec3, time: f32x4) -> f32x4 {
+        let dir = end - start;
+        let dist = dir.mag();
+        let dir = dir / dist;
+
+        self.iter().fold(f32x4::ONE, |acc, hitable| {
+            acc * hitable.occluded(start, end, time)
+        })
+    }
+
     pub fn add_hits(
         &self,
         ray: WRay,

@@ -6,6 +6,7 @@ mod film;
 mod filter;
 mod hitable;
 mod integrator;
+mod light;
 mod material;
 mod math;
 mod ray;
@@ -20,38 +21,35 @@ use film::{ChannelKind, Film};
 use filter::BlackmanHarrisFilter;
 use hitable::HitableStore;
 use integrator::PathTracingIntegrator;
-use material::{Dielectric, Emissive, Lambertian, MaterialStore, Metallic, Sky};
+use light::{Light, SphereLight};
+use material::{Dielectric, Emissive, Lambertian, MaterialStore, Sky};
 use math::{f32x4, Extent2u, Vec3};
 use sdf::{BoxFold, MandelBox, SphereFold, TracedSDF};
-use spectrum::WSrgb;
+use spectrum::{Srgb, WSrgb};
 use sphere::Sphere;
 use world::World;
 
 use std::time::Instant;
 
-const RES: (usize, usize) = (1280, 720);
-const SAMPLES: usize = 128;
+const RES: (usize, usize) = (960, 540);
+const SAMPLES: usize = 4;
 
 const MB_ITERS: usize = 20;
 
 fn setup() -> (CameraHandle, World) {
     let mut materials = MaterialStore::new();
 
-    let grey = materials.add_material(Dielectric::new(
-        WSrgb::new_splat(0.3, 0.3, 0.3),
-        f32x4::from(0.1),
-    ));
+    // let grey = materials.add_material(Dielectric::new(
+    //     WSrgb::new_splat(0.3, 0.3, 0.3),
+    //     f32x4::from(0.1),
+    // ));
 
-    // let pink = materials.add_material(Lambertian::new(WSrgb::new_splat(0.75, 0.5, 0.55)));
+    let pink = materials.add_material(Lambertian::new(WSrgb::new_splat(0.75, 0.5, 0.55)));
 
     // let pink = materials.add_material(Metallic::new(
     //     WSrgb::new_splat(0.75, 0.5, 0.55),
     //     f32x4::from(0.0),
     // ));
-
-    let white_emissive = materials.add_material(Emissive::new(WSrgb::new_splat(4.0, 3.0, 2.5) * f32x4::from(2.25)));
-    let blue_emissive = materials.add_material(Emissive::new(WSrgb::new_splat(1.5, 2.5, 5.0) * f32x4::from(2.25)));
-    let pink_emissive = materials.add_material(Emissive::new(WSrgb::new_splat(4.5, 2.0, 3.0) * f32x4::from(2.25)));
 
     let sky = materials.add_material(Sky {});
 
@@ -61,38 +59,44 @@ fn setup() -> (CameraHandle, World) {
 
     hitables.push(TracedSDF::new(
         MandelBox::new(MB_ITERS, BoxFold::new(1.0), SphereFold::new(0.5, 1.0), -2.0),
-        grey,
+        pink,
     ));
 
-    hitables.push(Sphere::new(
-        Vec3::new(0.0, 0.5, 2.65),
-        0.35,
-        white_emissive,
-    ));
+    let mut lights: Vec<Box<dyn Light>> = Vec::new();
 
-    hitables.push(Sphere::new(
-        Vec3::new(1.5, -0.35, 1.95),
-        0.1,
-        blue_emissive,
-    ));
+    let white = Srgb::new(4.0, 3.0, 2.5) * 20000.00;
+    let blue = Srgb::new(1.5, 2.5, 5.0) * 2.25;
+    let pink = Srgb::new(4.5, 2.0, 3.0) * 2.25;
 
-    hitables.push(Sphere::new(
-        Vec3::new(1.5, 0.35, 1.95),
-        0.1,
-        pink_emissive,
-    ));
+    lights.push(Box::new(SphereLight::new(
+        Vec3::new(0.0, 1.0, 2.65) * 50.0,
+        10.0,
+        white,
+    )));
 
-    hitables.push(Sphere::new(
-        Vec3::new(-1.5, -0.35, 1.95),
-        0.1,
-        blue_emissive,
-    ));
+    // lights.push(Box::new(SphereLight::new(
+    //     Vec3::new(1.5, -0.35, 1.95),
+    //     0.1,
+    //     blue,
+    // )));
 
-    hitables.push(Sphere::new(
-        Vec3::new(-1.5, 0.35, 1.95),
-        0.1,
-        pink_emissive,
-    ));
+    // lights.push(Box::new(SphereLight::new(
+    //     Vec3::new(1.5, 0.35, 1.95),
+    //     0.1,
+    //     pink,
+    // )));
+
+    // lights.push(Box::new(SphereLight::new(
+    //     Vec3::new(-1.5, -0.35, 1.95),
+    //     0.1,
+    //     blue,
+    // )));
+
+    // lights.push(Box::new(SphereLight::new(
+    //     Vec3::new(-1.5, 0.35, 1.95),
+    //     0.1,
+    //     pink,
+    // )));
 
     // 3
     // let camera = ThinLensCamera::new(
@@ -137,6 +141,7 @@ fn setup() -> (CameraHandle, World) {
         World {
             materials,
             hitables,
+            lights,
             cameras,
         },
     )
