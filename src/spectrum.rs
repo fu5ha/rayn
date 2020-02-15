@@ -86,6 +86,11 @@ impl WSrgb {
     pub fn splat(srgb: Srgb) -> Self {
         Self(Wec3::splat(srgb.0))
     }
+
+    #[allow(dead_code)]
+    pub fn is_finite(&self) -> f32x4 {
+        self.x.is_finite() | self.y.is_finite() | self.z.is_finite()
+    }
 }
 
 impl From<[Srgb; 4]> for WSrgb {

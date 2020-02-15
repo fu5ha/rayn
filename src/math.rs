@@ -73,7 +73,7 @@ impl RandomSample3d<f32x4> for Wec3 {
     // in return coord space: ret.z / pi
     fn cosine_weighted_in_hemisphere(samples: &[f32x4; 2]) -> Self {
         let xy = Wec2::rand_in_unit_disk(samples);
-        let z = (f32x4::ONE - xy.mag_sq()).sqrt();
+        let z = (f32x4::ONE - xy.mag_sq().min(f32x4::ONE)).sqrt();
         Wec3::new(xy.x, xy.y, z)
     }
 
@@ -178,13 +178,16 @@ pub fn concentric_circle_map_polar(uv: &[f32x4; 2], radius: f32x4) -> (f32x4, f3
     let two = f32x4::from(2.0);
     let a = uv[0] * two - f32x4::ONE;
     let b = uv[1] * two - f32x4::ONE;
+    let zero_mask = a.cmp_eq(f32x4::ZERO) & b.cmp_eq(f32x4::ZERO);
+    let a = f32x4::merge(zero_mask, f32x4::from(0.001), a);
+    let b = f32x4::merge(zero_mask, f32x4::from(0.001), b);
     let r1 = radius * a;
     let r2 = radius * b;
     let phi1 = f32x4::FRAC_PI_4 * b / a;
     let phi2 = f32x4::FRAC_PI_2 - f32x4::FRAC_PI_4 * a / b;
     let mask = (a * a).cmp_gt(b * b);
-    let r = f32x4::merge(r1, r2, mask);
-    let phi = f32x4::merge(phi1, phi2, mask);
+    let r = f32x4::merge(mask, r1, r2);
+    let phi = f32x4::merge(mask, phi1, phi2);
     (r, phi)
 }
 

@@ -31,8 +31,8 @@ use world::World;
 
 use std::time::Instant;
 
-const RES: (usize, usize) = (1920, 1080);
-const SAMPLES: usize = 64;
+const RES: (usize, usize) = (1280, 720);
+const SAMPLES: usize = 8;
 
 const MB_ITERS: usize = 20;
 
@@ -41,7 +41,7 @@ fn setup() -> (CameraHandle, World) {
 
     let grey = materials.add_material(Dielectric::new_remap(
         Srgb::new(0.3, 0.3, 0.3),
-        0.4,
+        0.35,
     ));
 
     let sky = materials.add_material(Sky {});
@@ -57,12 +57,12 @@ fn setup() -> (CameraHandle, World) {
 
     let mut lights: Vec<Box<dyn Light>> = Vec::new();
 
-    let sun = Srgb::new(4.0, 3.0, 2.5) * 45000.0;
-    let blue = Srgb::new(1.5, 2.5, 5.0) * 8.0;
-    let pink = Srgb::new(4.5, 2.0, 3.0) * 8.0;
+    let sun = Srgb::new(4.0, 3.0, 2.5) * 25000.0;
+    let blue = Srgb::new(1.5, 2.5, 5.0) * 5.0;
+    let pink = Srgb::new(4.5, 2.0, 3.0) * 5.0;
 
     lights.push(Box::new(SphereLight::new(
-        Vec3::new(2.65, 2.0, -1.0) * 50.0,
+        Vec3::new(2.65, 3.0, -1.0) * 50.0,
         1.0,
         sun,
     )));

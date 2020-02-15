@@ -191,7 +191,7 @@ impl BSDF for DielectricBSDF {
         let cos_alpha = f32x4::ZERO.max(half.dot(n)).powf(self.roughness);
         let two = f32x4::from(2.0);
         let spec_factor = cos_alpha * (self.roughness + two) / (two * f32x4::PI);
-        let spec_f = WSrgb::one() * spec_factor * fresnel / wi.dot(n).abs();
+        let spec_f = WSrgb::one() * spec_factor * fresnel;// / wi.dot(n).max(f32x4::EPSILON);
         let diffuse_f = self.albedo / f32x4::PI * (f32x4::ONE - fresnel);
         spec_f + diffuse_f
     }
@@ -214,8 +214,8 @@ impl BSDF for DielectricBSDF {
         let diffuse_bounce = (intersection.basis * diffuse_sample).normalized();
         // in this case diffuse_sample.z = diffuse_sample.dot(Wec3::unit_z())
         // because using intersection coordinate system basis
-        let diffuse_pdf = diffuse_sample.z / f32x4::from(PI);
-        let diffuse_f = self.albedo / f32x4::from(PI);
+        let diffuse_pdf = (diffuse_sample.z / f32x4::PI).max(f32x4::from(0.00001));
+        let diffuse_f = self.albedo / f32x4::PI;
 
         // spec part
         let spec_sample = Wec3::cosine_power_weighted(array_ref![samples_2d, 2, 2], self.roughness);
@@ -227,14 +227,19 @@ impl BSDF for DielectricBSDF {
 
         // in this case spec_sample.z = spec_sample.dot(Wec3::unit_z()) = cos_alpha
         // because using reflection coordinate system basis
-        let cos_alpha_pow = spec_sample.z.powf(self.roughness);
+        let cos_alpha_pow = spec_sample.z.powf(self.roughness).max(f32x4::EPSILON);
 
         let spec_pdf = (self.roughness + f32x4::ONE) / f32x4::TWO_PI * cos_alpha_pow;
 
         let spec_coeff = (self.roughness + two) / f32x4::TWO_PI * cos_alpha_pow;
         let below_horizon = norm.dot(spec_bounce).cmp_lt(f32x4::ZERO);
         let spec_coeff = f32x4::merge(below_horizon, f32x4::ZERO, spec_coeff);
-        let spec_f = WSrgb::one() * spec_coeff / cos;
+        // if spec_coeff.cmp_gt(f32x4::from(1000.0)).move_mask() != 0b0000 {
+        //     println!("spec {:?}", spec_coeff);
+        //     println!("cosalpha {:?}", cos_alpha_pow);
+        // }
+        let spec_f = WSrgb::one() * spec_coeff;
+
 
         // merge by fresnel
 

@@ -81,7 +81,7 @@ impl Integrator for PathTracingIntegrator {
         let scattering_event = bsdf.scatter(
             wi,
             &intersection,
-            samples_1d[2],
+            samples_1d[1],
             arrayref::array_ref![samples_2d, 8, 4],
         );
 
