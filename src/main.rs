@@ -31,8 +31,8 @@ use world::World;
 
 use std::time::Instant;
 
-const RES: (usize, usize) = (1280, 720);
-const SAMPLES: usize = 8;
+const RES: (usize, usize) = (1920, 1080);
+const SAMPLES: usize = 24;
 
 const MB_ITERS: usize = 20;
 
@@ -40,8 +40,8 @@ fn setup() -> (CameraHandle, World) {
     let mut materials = MaterialStore::new();
 
     let grey = materials.add_material(Dielectric::new_remap(
-        Srgb::new(0.3, 0.3, 0.3),
-        0.35,
+        Srgb::new(0.2, 0.2, 0.2),
+        0.4,
     ));
 
     let sky = materials.add_material(Sky {});
@@ -57,12 +57,12 @@ fn setup() -> (CameraHandle, World) {
 
     let mut lights: Vec<Box<dyn Light>> = Vec::new();
 
-    let sun = Srgb::new(4.0, 3.0, 2.5) * 25000.0;
-    let blue = Srgb::new(1.5, 2.5, 5.0) * 5.0;
-    let pink = Srgb::new(4.5, 2.0, 3.0) * 5.0;
+    let sun = Srgb::new(4.5, 3.5, 3.0) * 40000.0;
+    let pink = Srgb::new(4.5, 1.5, 3.0) * 3.0;
+    let blue = Srgb::new(1.5, 3.5, 4.5) * 3.0;
 
     lights.push(Box::new(SphereLight::new(
-        Vec3::new(2.65, 3.0, -1.0) * 50.0,
+        Vec3::new(2.65, 1.5, -1.0) * 50.0,
         1.0,
         sun,
     )));
@@ -85,27 +85,27 @@ fn setup() -> (CameraHandle, World) {
         pink,
     )));
 
-    lights.push(Box::new(SphereLight::new(
-        Vec3::new(-1.5, -0.35, 1.95),
-        0.1,
-        blue,
-    )));
+    // lights.push(Box::new(SphereLight::new(
+    //     Vec3::new(-1.5, -0.35, 1.95),
+    //     0.1,
+    //     blue,
+    // )));
 
-    lights.push(Box::new(SphereLight::new(
-        Vec3::new(-1.5, 0.35, 1.95),
-        0.1,
-        pink,
-    )));
+    // lights.push(Box::new(SphereLight::new(
+    //     Vec3::new(-1.5, 0.35, 1.95),
+    //     0.1,
+    //     pink,
+    // )));
 
     // 1
     let camera = ThinLensCamera::new(
         RES.0 as f32 / RES.1 as f32,
         60.0,
         0.005,
-        Vec3::new(7.5, -2.0, 9.5) * 0.3,
-        Vec3::new(0.0, 1.0, 1.0),
+        Vec3::new(1.5, -0.4, 2.2),
+        Vec3::new(1.3, -0.4, 1.6),
         Vec3::new(0.0, 1.0, 0.0),
-        Vec3::new(1.5, -0.2, 2.0),
+        Vec3::new(1.3, -0.4, 1.6),
     );
 
     let mut cameras = CameraStore::new();
@@ -143,7 +143,7 @@ fn main() {
     .unwrap();
 
     let frame_rate = 24;
-    let frame_range = 0..1;
+    let frame_range = 1..2;
     let shutter_speed = 1.0 / 24.0;
 
     let filter = BlackmanHarrisFilter::new(1.5);
@@ -162,6 +162,7 @@ fn main() {
             &integrator,
             &filter,
             Extent2u::new(16, 16),
+            frame,
             frame_start..frame_end,
             SAMPLES,
         );
@@ -180,8 +181,8 @@ fn main() {
         film.save_to(
             &[ChannelKind::WorldNormal, ChannelKind::Color],
             "renders",
-            format!("mb_{}_iters_frame_{}", MB_ITERS, frame),
-            true,
+            format!("{}_spp", SAMPLES * 4),
+            false,
         )
         .unwrap();
     }

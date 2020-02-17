@@ -184,14 +184,14 @@ where
 }
 
 impl BSDF for DielectricBSDF {
-    fn f(&self, wo: Wec3, wi: Wec3, n: Wec3) -> WSrgb {
+    fn f(&self, wi: Wec3, wo: Wec3, n: Wec3) -> WSrgb {
         let dot = f32x4::ZERO.max(wi.dot(n));
         let fresnel = f_schlick(dot, f32x4::from(0.04));
         let half = (wo + wi).normalized();
         let cos_alpha = f32x4::ZERO.max(half.dot(n)).powf(self.roughness);
         let two = f32x4::from(2.0);
         let spec_factor = cos_alpha * (self.roughness + two) / (two * f32x4::PI);
-        let spec_f = WSrgb::one() * spec_factor * fresnel;// / wi.dot(n).max(f32x4::EPSILON);
+        let spec_f = WSrgb::one() * spec_factor * fresnel;
         let diffuse_f = self.albedo / f32x4::PI * (f32x4::ONE - fresnel);
         spec_f + diffuse_f
     }
@@ -204,10 +204,9 @@ impl BSDF for DielectricBSDF {
         samples_2d: &[f32x4; 4],
     ) -> Option<WScatteringEvent> {
         let norm = intersection.normal;
-        let cos = norm.dot(-wo).abs();
+        let cos = norm.dot(wo).abs();
         let two = f32x4::from(2.0);
 
-        let fresnel = f_schlick(cos, f32x4::from(0.04));
 
         // diffuse part
         let diffuse_sample = Wec3::cosine_weighted_in_hemisphere(array_ref![samples_2d, 0, 2]);
@@ -234,23 +233,18 @@ impl BSDF for DielectricBSDF {
         let spec_coeff = (self.roughness + two) / f32x4::TWO_PI * cos_alpha_pow;
         let below_horizon = norm.dot(spec_bounce).cmp_lt(f32x4::ZERO);
         let spec_coeff = f32x4::merge(below_horizon, f32x4::ZERO, spec_coeff);
-        // if spec_coeff.cmp_gt(f32x4::from(1000.0)).move_mask() != 0b0000 {
-        //     println!("spec {:?}", spec_coeff);
-        //     println!("cosalpha {:?}", cos_alpha_pow);
-        // }
+
         let spec_f = WSrgb::one() * spec_coeff;
 
-
         // merge by fresnel
-
+        let fresnel = f_schlick(cos, f32x4::from(0.04));
         let fresnel_sample = f32x4::from(samples_1d);
-
         let fresnel_mask = fresnel_sample.cmp_lt(fresnel);
 
         Some(WScatteringEvent {
             wi: Wec3::merge(fresnel_mask, spec_bounce, diffuse_bounce),
             f: WSrgb::merge(fresnel_mask, spec_f, diffuse_f),
-            pdf: f32x4::merge(fresnel_mask, spec_pdf, diffuse_pdf),
+            pdf: fresnel * spec_pdf + (f32x4::ONE - fresnel) * diffuse_pdf,
         })
     }
 }
@@ -429,8 +423,8 @@ impl BSDF for SkyBSDF {
         let dir = -wo;
         let t = f32x4::from(0.5) * (dir.dot(Wec3::unit_y()) + f32x4::ONE);
 
-        let bottom = WSrgb::new_splat(0.05, 0.025, 0.1);
-        let top = WSrgb::new_splat(1.2, 1.15, 1.8);
+        let bottom = WSrgb::new_splat(0.05, 0.025, 0.1) * f32x4::from(0.25);
+        let top = WSrgb::new_splat(0.7, 0.5, 0.9) * f32x4::from(0.25);
         bottom * (f32x4::ONE - t) + top * t
     }
 }

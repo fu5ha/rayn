@@ -45,7 +45,11 @@ pub trait RandomSample2d {
 impl RandomSample2d for Wec2 {
     type Sample = [f32x4; 2];
     fn rand_in_unit_disk(samples: &Self::Sample) -> Self {
-        concentric_circle_map(samples, f32x4::ONE)
+        // let r = samples[0].sqrt();
+        // let theta = samples[1] * f32x4::TWO_PI;
+        // let (s, c) = theta.sin_cos();
+        // Wec2::new(r * c, r * s)
+        concentric_circle_map(samples)
     }
 }
 
@@ -173,26 +177,22 @@ pub fn power_heuristic(n_samples_f: usize, f_pdf: f32, n_samples_g: usize, g_pdf
     f * f / (f * f + g * g)
 }
 
-// returns (r, phi)
-pub fn concentric_circle_map_polar(uv: &[f32x4; 2], radius: f32x4) -> (f32x4, f32x4) {
+pub fn concentric_circle_map(uv: &[f32x4; 2]) -> Wec2 {
     let two = f32x4::from(2.0);
-    let a = uv[0] * two - f32x4::ONE;
-    let b = uv[1] * two - f32x4::ONE;
-    let zero_mask = a.cmp_eq(f32x4::ZERO) & b.cmp_eq(f32x4::ZERO);
-    let a = f32x4::merge(zero_mask, f32x4::from(0.001), a);
-    let b = f32x4::merge(zero_mask, f32x4::from(0.001), b);
-    let r1 = radius * a;
-    let r2 = radius * b;
-    let phi1 = f32x4::FRAC_PI_4 * b / a;
-    let phi2 = f32x4::FRAC_PI_2 - f32x4::FRAC_PI_4 * a / b;
-    let mask = (a * a).cmp_gt(b * b);
-    let r = f32x4::merge(mask, r1, r2);
-    let phi = f32x4::merge(mask, phi1, phi2);
-    (r, phi)
-}
+    let a = uv[0].mul_add(two, -f32x4::ONE);
+    let b = uv[1].mul_add(two, -f32x4::ONE);
 
-pub fn concentric_circle_map(uv: &[f32x4; 2], radius: f32x4) -> Wec2 {
-    let (r, phi) = concentric_circle_map_polar(uv, radius);
+    let zero_mask = a.cmp_eq(f32x4::ZERO) & b.cmp_eq(f32x4::ZERO);
+    let b = f32x4::merge(zero_mask, f32x4::from(0.0001), b);
+
+    let phi1 = f32x4::FRAC_PI_4 * b / a;
+    let phi2 = (-f32x4::FRAC_PI_4 / b).mul_add(a, f32x4::FRAC_PI_2);
+
+    let mask = (a * a).cmp_gt(b * b);
+
+    let r = f32x4::merge(mask, a, b);
+    let phi = f32x4::merge(mask, phi1, phi2);
+
     let (s, c) = phi.sin_cos();
     Wec2::new(r * c, r * s)
 }

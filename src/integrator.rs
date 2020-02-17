@@ -54,12 +54,12 @@ impl Integrator for PathTracingIntegrator {
         spawned_rays: &mut BumpVec<Ray>,
         output_samples: &mut BumpVec<(Vec2u, ChannelSample)>,
     ) {
-        let wi = intersection.ray.dir;
+        let wo = -intersection.ray.dir;
         let material = world.materials.get(material);
 
         let bsdf = material.get_bsdf_at(&intersection, bump);
 
-        intersection.ray.radiance += bsdf.le(-wi, &intersection) * intersection.ray.throughput;
+        intersection.ray.radiance += bsdf.le(wo, &intersection) * intersection.ray.throughput;
 
         if bsdf.receives_light() && world.lights.len() > 0 {
             let lights = (samples_1d[0] * f32x4::from(world.lights.len() as f32)).floor();
@@ -79,7 +79,7 @@ impl Integrator for PathTracingIntegrator {
         }
 
         let scattering_event = bsdf.scatter(
-            wi,
+            wo,
             &intersection,
             samples_1d[1],
             arrayref::array_ref![samples_2d, 8, 4],

@@ -385,6 +385,7 @@ impl<'a, N: ArrayLength<ChannelStorage> + ArrayLength<ChannelTileStorage>> Film<
         integrator: &I,
         filter: &F,
         tile_size: Extent2u,
+        frame: usize,
         time_range: Range<f32>,
         samples: usize,
     ) where
@@ -429,7 +430,7 @@ impl<'a, N: ArrayLength<ChannelStorage> + ArrayLength<ChannelTileStorage>> Film<
         let sets_1d = 1 + integrator.requested_1d_sample_sets();
         let sets_2d = 2 + integrator.requested_2d_sample_sets();
 
-        let sample_sets = Samples::new_rd(4 * samples, sets_1d, sets_2d, 0);
+        let sample_sets = Samples::new_rd(4 * samples, sets_1d, sets_2d, frame as u64);
         // let sample_sets = Samples::new_random(4 * samples, sets_1d, sets_2d);
 
         let width = self.res.w;

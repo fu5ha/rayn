@@ -20,12 +20,12 @@ impl Samples {
         let mut samples_2d = vec![0f32; samples * 2 * sets_2d];
 
         for i in 0..sets_1d {
-            let mut seq_1d = quasi_rd::Sequence::new_with_offset(1, offset + i as u64);
+            let mut seq_1d = quasi_rd::Sequence::new_with_offset(1, (offset + i as u64) << 32);
             seq_1d.fill_with_samples_f32(&mut samples_1d[samples * i..samples * (i + 1)]);
         }
 
         for i in 0..sets_2d {
-            let mut seq_2d = quasi_rd::Sequence::new_with_offset(2, offset + sets_1d as u64 + i as u64);
+            let mut seq_2d = quasi_rd::Sequence::new_with_offset(2, (offset + sets_1d as u64 + i as u64) << 32);
             seq_2d.fill_with_samples_f32(&mut samples_2d[samples * 2 * i..2 * samples * (i + 1)]);
         }
 
