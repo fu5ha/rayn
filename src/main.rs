@@ -16,7 +16,7 @@ mod spectrum;
 mod sphere;
 mod world;
 
-use camera::{CameraHandle, CameraStore, ThinLensCamera};
+use camera::{CameraHandle, CameraStore, OrthographicCamera};
 use film::{ChannelKind, Film};
 use filter::BlackmanHarrisFilter;
 use hitable::HitableStore;
@@ -31,20 +31,20 @@ use world::World;
 
 use std::time::Instant;
 
-const RES: (usize, usize) = (1920, 1080);
-const SAMPLES: usize = 24;
+const RES: (usize, usize) = (1500, 1100);
+const SAMPLES: usize = 12;
 
 const MB_ITERS: usize = 20;
 
 fn setup() -> (CameraHandle, World) {
     let mut materials = MaterialStore::new();
 
-    let grey = materials.add_material(Dielectric::new_remap(
-        Srgb::new(0.2, 0.2, 0.2),
-        0.4,
-    ));
+    let grey = materials.add_material(Dielectric::new_remap(Srgb::new(0.2, 0.2, 0.2), 0.8));
 
-    let sky = materials.add_material(Sky {});
+    let sky = materials.add_material(Sky::new(
+        Srgb::new(0.6, 0.3, 0.5) * 5.0,
+        Srgb::new(0.3, 0.2, 0.6) * 3.0,
+    ));
 
     let mut hitables = HitableStore::new();
 
@@ -57,14 +57,14 @@ fn setup() -> (CameraHandle, World) {
 
     let mut lights: Vec<Box<dyn Light>> = Vec::new();
 
-    let sun = Srgb::new(4.5, 3.5, 3.0) * 40000.0;
-    let pink = Srgb::new(4.5, 1.5, 3.0) * 3.0;
-    let blue = Srgb::new(1.5, 3.5, 4.5) * 3.0;
+    let bluesun = Srgb::new(1.5, 3.0, 5.0) * 18000.0;
+    let pink = Srgb::new(4.5, 1.5, 3.0) * 4.0;
+    let blue = Srgb::new(1.5, 3.5, 4.5) * 4.0;
 
     lights.push(Box::new(SphereLight::new(
         Vec3::new(2.65, 1.5, -1.0) * 50.0,
         1.0,
-        sun,
+        bluesun,
     )));
 
     // lights.push(Box::new(SphereLight::new(
@@ -85,27 +85,25 @@ fn setup() -> (CameraHandle, World) {
         pink,
     )));
 
-    // lights.push(Box::new(SphereLight::new(
-    //     Vec3::new(-1.5, -0.35, 1.95),
-    //     0.1,
-    //     blue,
-    // )));
+    lights.push(Box::new(SphereLight::new(
+        Vec3::new(1.95, -0.35, 1.5),
+        0.1,
+        pink,
+    )));
 
-    // lights.push(Box::new(SphereLight::new(
-    //     Vec3::new(-1.5, 0.35, 1.95),
-    //     0.1,
-    //     pink,
-    // )));
+    lights.push(Box::new(SphereLight::new(
+        Vec3::new(1.95, 0.35, 1.5),
+        0.1,
+        blue,
+    )));
 
     // 1
-    let camera = ThinLensCamera::new(
-        RES.0 as f32 / RES.1 as f32,
-        60.0,
-        0.005,
-        Vec3::new(1.5, -0.4, 2.2),
-        Vec3::new(1.3, -0.4, 1.6),
+    let camera = OrthographicCamera::new(
+        15.0 / 4.0,
+        11.0 / 4.0,
+        Vec3::new(9.5, -3.5, 9.5),
+        Vec3::new(0.0, 0.8, 0.0),
         Vec3::new(0.0, 1.0, 0.0),
-        Vec3::new(1.3, -0.4, 1.6),
     );
 
     let mut cameras = CameraStore::new();

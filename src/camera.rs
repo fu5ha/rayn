@@ -86,6 +86,7 @@ pub struct ThinLensCamera<A, O, LA, U, F> {
 }
 
 impl<A, O, LA, U, F> ThinLensCamera<A, O, LA, U, F> {
+    #[allow(dead_code)]
     pub fn new(aspect: f32, vfov: f32, aperture: A, origin: O, at: LA, up: U, focus: F) -> Self {
         let theta = vfov * std::f32::consts::PI / 180.0;
         let half_height = (theta / 2.0).tan();
@@ -143,6 +144,68 @@ where
         WRay::new(
             origin,
             (lower_left + horiz + verti - origin).normalized(),
+            time,
+            [tile_coord, tile_coord, tile_coord, tile_coord],
+            [true, true, true, true],
+            [scramble, scramble, scramble, scramble],
+            sample_nums,
+        )
+    }
+}
+
+#[derive(Clone, Copy)]
+pub struct OrthographicCamera<O, A, U> {
+    half_size: Wec2,
+    full_size: Wec2,
+    origin: O,
+    at: A,
+    up: U,
+}
+
+impl<O, A, U> OrthographicCamera<O, A, U> {
+    #[allow(dead_code)]
+    pub fn new(width: f32, height: f32, origin: O, at: A, up: U) -> Self {
+        Self {
+            half_size: Wec2::new_splat(width / 2.0, height / 2.0),
+            full_size: Wec2::new_splat(width, height),
+            origin,
+            at,
+            up,
+        }
+    }
+}
+
+impl<O, A, U> Camera for OrthographicCamera<O, A, U>
+where
+    O: WSequenced<Wec3>,
+    A: WSequenced<Wec3>,
+    U: WSequenced<Wec3>,
+{
+    fn get_rays(
+        &self,
+        scramble: f32,
+        sample_nums: [usize; 4],
+        tile_coord: Vec2u,
+        uv: Wec2,
+        time: f32x4,
+        _samples: &[f32x4; 2],
+    ) -> WRay {
+        let origin = self.origin.sample_at(time);
+        let at = self.at.sample_at(time);
+        let up = self.up.sample_at(time);
+
+        let basis_w = (at - origin).normalized();
+        let basis_u = basis_w.cross(up).normalized();
+        let basis_v = basis_u.cross(basis_w);
+        let lower_left = origin - basis_u * self.half_size.x - basis_v * self.half_size.y;
+
+        let offset = basis_u * uv.x * self.full_size.x + basis_v * uv.y * self.full_size.y;
+
+        let origin = lower_left + offset;
+
+        WRay::new(
+            origin,
+            basis_w,
             time,
             [tile_coord, tile_coord, tile_coord, tile_coord],
             [true, true, true, true],

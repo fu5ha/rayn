@@ -158,7 +158,6 @@ impl Dielectric<WSrgb, f32x4> {
     pub fn new_remap(albedo: Srgb, roughness: f32) -> Self {
         let roughness = 1.0 - roughness;
         let roughness = 1.0 + roughness * roughness * roughness * roughness * 300.0;
-        
         Self {
             albedo_gen: WSrgb::splat(albedo),
             roughness_gen: f32x4::from(roughness),
@@ -206,7 +205,6 @@ impl BSDF for DielectricBSDF {
         let norm = intersection.normal;
         let cos = norm.dot(wo).abs();
         let two = f32x4::from(2.0);
-
 
         // diffuse part
         let diffuse_sample = Wec3::cosine_weighted_in_hemisphere(array_ref![samples_2d, 0, 2]);
@@ -385,7 +383,16 @@ impl BSDF for DielectricBSDF {
 // }
 
 #[derive(Clone, Copy)]
-pub struct Sky {}
+pub struct Sky {
+    top: Srgb,
+    bottom: Srgb,
+}
+
+impl Sky {
+    pub fn new(top: Srgb, bottom: Srgb) -> Self {
+        Self { top, bottom }
+    }
+}
 
 impl Material for Sky {
     fn get_bsdf_at<'bump>(
@@ -393,12 +400,18 @@ impl Material for Sky {
         _intersection: &WShadingPoint,
         bump: &'bump Bump,
     ) -> &'bump mut dyn BSDF {
-        bump.alloc_with(|| SkyBSDF {})
+        bump.alloc_with(|| SkyBSDF {
+            top: WSrgb::splat(self.top),
+            bottom: WSrgb::splat(self.bottom),
+        })
     }
 }
 
 #[derive(Clone, Copy)]
-pub struct SkyBSDF {}
+pub struct SkyBSDF {
+    top: WSrgb,
+    bottom: WSrgb,
+}
 
 impl BSDF for SkyBSDF {
     fn receives_light(&self) -> bool {
@@ -421,11 +434,9 @@ impl BSDF for SkyBSDF {
 
     fn le(&self, wo: Wec3, _intersection: &WShadingPoint) -> WSrgb {
         let dir = -wo;
-        let t = f32x4::from(0.5) * (dir.dot(Wec3::unit_y()) + f32x4::ONE);
+        let t = f32x4::from(0.5) * (dir.y + f32x4::ONE);
 
-        let bottom = WSrgb::new_splat(0.05, 0.025, 0.1) * f32x4::from(0.25);
-        let top = WSrgb::new_splat(0.7, 0.5, 0.9) * f32x4::from(0.25);
-        bottom * (f32x4::ONE - t) + top * t
+        self.bottom * (f32x4::ONE - t) + self.top * t
     }
 }
 
