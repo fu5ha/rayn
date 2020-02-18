@@ -75,12 +75,12 @@ impl<S: SDF<f32x4, Wec3> + Send + Sync> Hitable for TracedSDF<S> {
     }
 
     fn get_shading_info(&self, hit: WHit) -> (MaterialHandle, WShadingPoint) {
-        let normals = self.sdf.normals_fast(f32x4::from(0.0001));
+        let normals = self.sdf.normals_fast(f32x4::from(0.0002));
         let point = hit.point();
         let normal = normals.normal_at(point);
         (
             self.material,
-            WShadingPoint::new(hit, point, f32x4::from(0.0002), normal),
+            WShadingPoint::new(hit, point, f32x4::from(0.0003), normal),
         )
     }
 }

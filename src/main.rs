@@ -31,7 +31,7 @@ use world::World;
 
 use std::time::Instant;
 
-const RES: (usize, usize) = (1500, 1100);
+const RES: (usize, usize) = (1920, 1080);
 const SAMPLES: usize = 12;
 
 const MB_ITERS: usize = 20;
@@ -99,7 +99,7 @@ fn setup() -> (CameraHandle, World) {
 
     // 1
     let camera = OrthographicCamera::new(
-        15.0 / 4.0,
+        19.555 / 4.0,
         11.0 / 4.0,
         Vec3::new(9.5, -3.5, 9.5),
         Vec3::new(0.0, 0.8, 0.0),
