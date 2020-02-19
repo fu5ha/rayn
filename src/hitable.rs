@@ -1,3 +1,4 @@
+use crate::camera::Camera;
 use crate::material::MaterialHandle;
 use crate::math::{f32x4, OrthonormalBasis, Wat3, Wec3};
 use crate::ray::{Ray, WRay};
@@ -9,7 +10,15 @@ pub trait Hitable: Send + Sync {
     fn hit(&self, rays: &WRay, t_ranges: ::std::ops::Range<f32x4>) -> f32x4;
     // return 0 if occluded, 1 if not
     fn occluded(&self, start: Wec3, end: Wec3, time: f32x4) -> f32x4;
-    fn get_shading_info(&self, hits: WHit) -> (MaterialHandle, WShadingPoint);
+    /// err is a function that takes a point and returns the error bound
+    /// at that point based on a screen-space projection (i.e. computes pixel size
+    /// at that point).
+    fn get_shading_info(
+        &self,
+        hits: WHit,
+        primary: bool,
+        camera: &dyn Camera,
+    ) -> (MaterialHandle, WShadingPoint);
 }
 
 #[derive(Clone, Copy)]
@@ -90,6 +99,8 @@ impl<'bump> HitStore<'bump> {
         &mut self,
         hitables: &HitableStore,
         wintersections: &mut BumpVec<'_, (MaterialHandle, WShadingPoint)>,
+        primary: bool,
+        camera: &dyn Camera,
     ) {
         let total_hits = self
             .hits
@@ -119,8 +130,10 @@ impl<'bump> HitStore<'bump> {
                         *hits.get_unchecked(3),
                     ]
                 });
-                wintersections
-                    .push(unsafe { hitables.get_unchecked(obj_id) }.get_shading_info(hits));
+                wintersections.push(
+                    unsafe { hitables.get_unchecked(obj_id) }
+                        .get_shading_info(hits, primary, camera),
+                );
             }
         }
     }

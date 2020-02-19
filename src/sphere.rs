@@ -1,4 +1,5 @@
 use crate::animation::WSequenced;
+use crate::camera::Camera;
 use crate::hitable::{Hitable, WHit, WShadingPoint};
 use crate::material::MaterialHandle;
 use crate::math::{f32x4, Wec3};
@@ -80,7 +81,12 @@ impl<TR: WSequenced<Wec3>> Hitable for Sphere<TR> {
         }
     }
 
-    fn get_shading_info(&self, hit: WHit) -> (MaterialHandle, WShadingPoint) {
+    fn get_shading_info(
+        &self,
+        hit: WHit,
+        _primary: bool,
+        _camera: &dyn Camera,
+    ) -> (MaterialHandle, WShadingPoint) {
         let point = hit.point();
         let origin = WSequenced::sample_at(&self.transform_seq, hit.ray.time);
         let normal = (point - origin).normalized();

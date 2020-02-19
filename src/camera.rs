@@ -1,5 +1,5 @@
 use crate::animation::WSequenced;
-use crate::math::{f32x4, RandomSample2d, Vec2, Vec2u, Vec3, Wec2, Wec3};
+use crate::math::{f32x4, RandomSample2d, Vec2, Vec2u, Wec2, Wec3};
 use crate::ray::WRay;
 
 pub trait Camera: Send + Sync {
@@ -12,6 +12,10 @@ pub trait Camera: Send + Sync {
         time: f32x4,
         samples: &[f32x4; 2],
     ) -> WRay;
+
+    /// gets the pixel radius size (half-width) at some t value (distance) from the camera
+    /// assumes that the distance is along a ray emitted from the camera.
+    fn half_pixel_size_at(&self, t: f32x4) -> f32x4;
 }
 
 #[derive(Clone, Copy, Debug)]
@@ -34,50 +38,11 @@ impl CameraStore {
     }
 }
 
-#[derive(Copy, Clone)]
-pub struct PinholeCamera<OS> {
-    lower_left: Wec3,
-    full_size: Wec3,
-    origin_sequence: OS,
-}
-
-impl<TR> PinholeCamera<TR> {
-    #[allow(dead_code)]
-    pub fn new(aspect_ratio: f32, origin_sequence: TR) -> Self {
-        PinholeCamera {
-            lower_left: Wec3::splat(Vec3::new(-aspect_ratio * 0.5, -0.5, -1.0)),
-            full_size: Wec3::splat(Vec3::new(aspect_ratio, 1.0, 0.0)),
-            origin_sequence,
-        }
-    }
-}
-
-impl<OS: WSequenced<Wec3>> Camera for PinholeCamera<OS> {
-    fn get_rays(
-        &self,
-        scramble: f32,
-        sample_nums: [usize; 4],
-        tile_coord: Vec2u,
-        uv: Wec2,
-        time: f32x4,
-        _samples: &[f32x4; 2],
-    ) -> WRay {
-        let origin = self.origin_sequence.sample_at(time);
-        WRay::new(
-            origin,
-            (self.lower_left + self.full_size * Wec3::from(uv)).normalized(),
-            time,
-            [tile_coord, tile_coord, tile_coord, tile_coord],
-            [true, true, true, true],
-            [scramble, scramble, scramble, scramble],
-            sample_nums,
-        )
-    }
-}
-
 #[derive(Clone, Copy)]
 pub struct ThinLensCamera<A, O, LA, U, F> {
     half_size: Wec2,
+    // 2.0 * tan(hfov/2) / resolution.h / 2.0
+    half_pixel_size: f32x4,
     aperture: A,
     origin: O,
     at: LA,
@@ -87,12 +52,23 @@ pub struct ThinLensCamera<A, O, LA, U, F> {
 
 impl<A, O, LA, U, F> ThinLensCamera<A, O, LA, U, F> {
     #[allow(dead_code)]
-    pub fn new(aspect: f32, vfov: f32, aperture: A, origin: O, at: LA, up: U, focus: F) -> Self {
+    pub fn new(
+        resolution: Vec2,
+        vfov: f32,
+        aperture: A,
+        origin: O,
+        at: LA,
+        up: U,
+        focus: F,
+    ) -> Self {
         let theta = vfov * std::f32::consts::PI / 180.0;
         let half_height = (theta / 2.0).tan();
+        let aspect = resolution.x / resolution.y;
         let half_width = aspect * half_height;
+        let half_pixel_size = f32x4::from(half_height / resolution.y);
         ThinLensCamera {
             half_size: Wec2::splat(Vec2::new(half_width, half_height)),
+            half_pixel_size,
             aperture,
             origin,
             at,
@@ -151,12 +127,18 @@ where
             sample_nums,
         )
     }
+
+    fn half_pixel_size_at(&self, t: f32x4) -> f32x4 {
+        self.half_pixel_size * t
+    }
 }
 
 #[derive(Clone, Copy)]
 pub struct OrthographicCamera<O, A, U> {
     half_size: Wec2,
     full_size: Wec2,
+    half_pixel_size: f32x4,
+
     origin: O,
     at: A,
     up: U,
@@ -164,10 +146,14 @@ pub struct OrthographicCamera<O, A, U> {
 
 impl<O, A, U> OrthographicCamera<O, A, U> {
     #[allow(dead_code)]
-    pub fn new(width: f32, height: f32, origin: O, at: A, up: U) -> Self {
+    pub fn new(resolution: Vec2, vertical_size: f32, origin: O, at: A, up: U) -> Self {
+        let aspect = resolution.x / resolution.y;
+        let size = Vec2::new(vertical_size * aspect, vertical_size);
+        let pixel_size = vertical_size / resolution.y;
         Self {
-            half_size: Wec2::new_splat(width / 2.0, height / 2.0),
-            full_size: Wec2::new_splat(width, height),
+            half_size: Wec2::splat(size / 2.0),
+            full_size: Wec2::splat(size),
+            half_pixel_size: f32x4::from(pixel_size / 2.0),
             origin,
             at,
             up,
@@ -212,5 +198,9 @@ where
             [scramble, scramble, scramble, scramble],
             sample_nums,
         )
+    }
+
+    fn half_pixel_size_at(&self, _t: f32x4) -> f32x4 {
+        self.half_pixel_size
     }
 }

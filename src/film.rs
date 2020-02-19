@@ -544,7 +544,7 @@ impl<'a, N: ArrayLength<ChannelStorage> + ArrayLength<ChannelTileStorage>> Film<
                     );
                 }
 
-                hit_store.process_hits(&world.hitables, &mut wintersections);
+                hit_store.process_hits(&world.hitables, &mut wintersections, depth == 0, camera);
 
                 for (mat_id, wshading_point) in wintersections.drain(..) {
                     let samples_1d = [

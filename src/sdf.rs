@@ -1,12 +1,16 @@
+use crate::camera::Camera;
 use crate::hitable::{Hitable, WHit, WShadingPoint};
 use crate::material::MaterialHandle;
 use crate::math::{f32x4, Wec3};
 use crate::ray::WRay;
+use ultraviolet::wide::*;
 
 use sdfu::*;
 
 const MAX_MARCHES: u32 = 1000;
 const MAX_VIS_MARCHES: u32 = 100;
+
+const_f32_as_f32x4!(EPSILON_MIN, 0.0001);
 
 pub struct TracedSDF<S> {
     sdf: S,
@@ -74,13 +78,27 @@ impl<S: SDF<f32x4, Wec3> + Send + Sync> Hitable for TracedSDF<S> {
         t
     }
 
-    fn get_shading_info(&self, hit: WHit) -> (MaterialHandle, WShadingPoint) {
-        let normals = self.sdf.normals_fast(f32x4::from(0.0002));
+    fn get_shading_info(
+        &self,
+        hit: WHit,
+        primary: bool,
+        camera: &dyn Camera,
+    ) -> (MaterialHandle, WShadingPoint) {
         let point = hit.point();
+        let dist = self.sdf.dist(point).abs();
+
+        let normal_eps = if primary {
+            camera.half_pixel_size_at(hit.t)
+        } else {
+            f32x4::from(0.001)
+        };
+
+        let normals = self.sdf.normals_fast(normal_eps);
+
         let normal = normals.normal_at(point);
         (
             self.material,
-            WShadingPoint::new(hit, point, f32x4::from(0.0003), normal),
+            WShadingPoint::new(hit, point, f32x4::from(2.0) * EPSILON_MIN.max(dist), normal),
         )
     }
 }

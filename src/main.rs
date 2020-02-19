@@ -23,7 +23,7 @@ use hitable::HitableStore;
 use integrator::PathTracingIntegrator;
 use light::{Light, SphereLight};
 use material::{Dielectric, MaterialStore, Sky};
-use math::{Extent2u, Vec3};
+use math::{Extent2u, Vec2, Vec3};
 use sdf::{BoxFold, MandelBox, SphereFold, TracedSDF};
 use spectrum::Srgb;
 use sphere::Sphere;
@@ -32,7 +32,7 @@ use world::World;
 use std::time::Instant;
 
 const RES: (usize, usize) = (1920, 1080);
-const SAMPLES: usize = 12;
+const SAMPLES: usize = 2;
 
 const MB_ITERS: usize = 20;
 
@@ -97,9 +97,10 @@ fn setup() -> (CameraHandle, World) {
         blue,
     )));
 
+    let res = Vec2::new(RES.0 as f32, RES.1 as f32);
     // 1
     let camera = OrthographicCamera::new(
-        19.555 / 4.0,
+        res,
         11.0 / 4.0,
         Vec3::new(9.5, -3.5, 9.5),
         Vec3::new(0.0, 0.8, 0.0),

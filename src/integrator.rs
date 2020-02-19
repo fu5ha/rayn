@@ -67,7 +67,7 @@ impl Integrator for PathTracingIntegrator {
             let lights = lights.as_ref().iter().map(|i| *i as usize);
 
             for (i, light_idx) in lights.enumerate() {
-            // let (i, light_idx) = (0, lights.next().unwrap());
+                // let (i, light_idx) = (0, lights.next().unwrap());
                 intersection.ray.radiance += sample_one_light(
                     world,
                     light_idx,
@@ -163,12 +163,14 @@ pub fn sample_one_light(
     let wo = -intersection.ray.dir;
     let wi = (end_point - intersection.point).normalized();
 
-    let occlude_point = intersection.point + intersection.normal * intersection.normal.dot(wi).signum() * intersection.offset_by;
-    let occluded =
-        world
-            .hitables
-            .test_occluded(occlude_point, end_point, intersection.ray.time);
+    let occlude_point = intersection.point
+        + intersection.normal * intersection.normal.dot(wi).signum() * intersection.offset_by;
+    let occluded = world
+        .hitables
+        .test_occluded(occlude_point, end_point, intersection.ray.time);
 
     let f = bsdf.f(wo, wi, intersection.normal) * intersection.normal.dot(wi).max(f32x4::ZERO);
-    li * f * f32x4::from(world.lights.len() as f32 / 4.0) / pdf * intersection.ray.throughput * occluded
+    li * f * f32x4::from(world.lights.len() as f32 / 4.0) / pdf
+        * intersection.ray.throughput
+        * occluded
 }
