@@ -39,7 +39,7 @@ macro_rules! declare_channels {
         }
 
         pub enum ChannelTileStorage {
-            $($name(Vec<($storage)>),)+
+            $($name(Vec<$storage>),)+
         }
 
         impl ChannelTileStorage {
