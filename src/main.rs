@@ -16,7 +16,7 @@ mod spectrum;
 mod sphere;
 mod world;
 
-use camera::{CameraHandle, CameraStore, OrthographicCamera};
+use camera::{CameraHandle, CameraStore, ThinLensCamera};
 use film::{ChannelKind, Film};
 use filter::BlackmanHarrisFilter;
 use hitable::HitableStore;
@@ -29,10 +29,12 @@ use spectrum::Srgb;
 use sphere::Sphere;
 use world::World;
 
+use sdfu::SDF;
+
 use std::time::Instant;
 
 const RES: (usize, usize) = (1920, 1080);
-const SAMPLES: usize = 2;
+const SAMPLES: usize = 24;
 
 const MB_ITERS: usize = 20;
 
@@ -51,7 +53,9 @@ fn setup() -> (CameraHandle, World) {
     hitables.push(Sphere::new(Vec3::new(0.0, 0.0, 0.0), 300.0, sky));
 
     hitables.push(TracedSDF::new(
-        MandelBox::new(MB_ITERS, BoxFold::new(1.0), SphereFold::new(0.5, 1.0), -2.0),
+        // MandelBox::new(MB_ITERS, BoxFold::new(1.0), SphereFold::new(0.5, 1.0), -2.0)
+        MandelBox::new(MB_ITERS, BoxFold::new(1.5), SphereFold::new(0.1, 1.5), -2.25)
+            .subtract(sdfu::Sphere::new(ultraviolet::f32x4::from(2.25)).translate(ultraviolet::Wec3::new_splat(0.0, 0.0, 2.0))),
         grey,
     ));
 
@@ -62,7 +66,7 @@ fn setup() -> (CameraHandle, World) {
     let blue = Srgb::new(1.5, 3.5, 4.5) * 4.0;
 
     lights.push(Box::new(SphereLight::new(
-        Vec3::new(2.65, 1.5, -1.0) * 50.0,
+        Vec3::new(-1.0, 2.65, 1.5) * 50.0,
         1.0,
         bluesun,
     )));
@@ -99,12 +103,21 @@ fn setup() -> (CameraHandle, World) {
 
     let res = Vec2::new(RES.0 as f32, RES.1 as f32);
     // 1
-    let camera = OrthographicCamera::new(
+    // let camera = OrthographicCamera::new(
+    //     res,
+    //     11.0 / 4.0,
+    //     Vec3::new(9.5, -3.5, 9.5),
+    //     Vec3::new(0.0, 0.8, 0.0),
+    //     Vec3::new(0.0, 1.0, 0.0),
+    // );
+    let camera = ThinLensCamera::new(
         res,
-        11.0 / 4.0,
-        Vec3::new(9.5, -3.5, 9.5),
-        Vec3::new(0.0, 0.8, 0.0),
+        60.0,
+        0.02,
+        Vec3::new(1.5, -0.4, 2.2) * 1.75,
+        Vec3::new(1.3, -0.4, 1.6),
         Vec3::new(0.0, 1.0, 0.0),
+        Vec3::new(0.0, 0.0, 0.0),
     );
 
     let mut cameras = CameraStore::new();
@@ -178,10 +191,10 @@ fn main() {
         println!("Post processing image...");
 
         film.save_to(
-            &[ChannelKind::WorldNormal, ChannelKind::Color],
+            &[ChannelKind::Alpha, ChannelKind::WorldNormal, ChannelKind::Color],
             "renders",
             format!("{}_spp", SAMPLES * 4),
-            false,
+            true,
         )
         .unwrap();
     }
