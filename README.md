@@ -16,14 +16,15 @@ This is a CPU-based path tracing renderer focused on rendering SDFs, specificall
 
 ### Demo images
 
-*All demo images in this repository are licensed under the **CC BY-NC-ND** license, which essentially means you are free to use them for **non-commercial purposes** so long as you:*
+*All demo images in this repository are licensed under the **CC BY-NC-ND** license which essentially means you are free to use them for **non-commercial purposes** so long as you:*
 
 *1. Credit me (my name, Gray Olson, and a link to my website, https://grayolson.me/)*
-*2. Do not modify them*
+
+*2. Do not modify them
+
+![[CC BY-NC-ND License Badge](https://creativecommons.org/licenses/by-nc-nd/4.0/legalcode)](https://mirrors.creativecommons.org/presskit/buttons/88x31/svg/by-nc-nd.svg)
 
 *If you wish to use them for commercial purposes, contact me and we can work out a license.*
-
-![[CC BY-NC-ND License Badge](https://creativecommons.org/licenses/by-nc-nd/4.0/legalcode)](https://mirrors.creativecommons.org/presskit/buttons/88x31/png/by-nc-nd.png)
 
 
 ![demo1](/render1.png?raw=true)
