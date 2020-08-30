@@ -20,7 +20,7 @@ This is a CPU-based path tracing renderer focused on rendering SDFs, specificall
 
 *1. Credit me (my name, Gray Olson, and a link to my website, https://grayolson.me/)*
 
-*2. Do not modify them
+*2. Do not modify them*
 
 ![[CC BY-NC-ND License Badge](https://creativecommons.org/licenses/by-nc-nd/4.0/legalcode)](https://mirrors.creativecommons.org/presskit/buttons/88x31/svg/by-nc-nd.svg)
 
