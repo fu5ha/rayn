@@ -1,5 +1,4 @@
 use crate::animation::WSequenced;
-use crate::camera::Camera;
 use crate::hitable::{Hitable, WHit, WShadingPoint};
 use crate::material::MaterialHandle;
 use crate::math::{f32x4, Wec3};
@@ -50,13 +49,12 @@ impl<TR: WSequenced<Wec3>> Hitable for Sphere<TR> {
         }
     }
 
-    fn hit(&self, ray: &WRay, t_range: ::std::ops::Range<f32x4>) -> f32x4 {
+    fn hit(&self, ray: &WRay, t_max: f32x4, _hit_threshold_at: &dyn Fn(f32x4) -> f32x4) -> f32x4 {
         let origin = WSequenced::sample_at(&self.transform_seq, ray.time);
         let oc = ray.origin - origin;
-        let a = ray.dir.mag_sq();
-        let b = f32x4::from(2.0) * oc.dot(ray.dir);
+        let b = oc.dot(ray.dir);
         let c = oc.mag_sq() - f32x4::from(self.radius * self.radius);
-        let descrim = b * b - f32x4::from(4.0) * a * c;
+        let descrim = b * b - c;
 
         let desc_pos = descrim.cmp_gt(f32x4::ZERO);
 
@@ -65,11 +63,11 @@ impl<TR: WSequenced<Wec3>> Hitable for Sphere<TR> {
         if desc_pos.move_mask() != 0b0000 {
             let desc_sqrt = descrim.sqrt();
 
-            let t1 = (-b - desc_sqrt) / (f32x4::from(2.0) * a);
-            let t1_valid = t1.cmp_gt(t_range.start) & t1.cmp_le(t_range.end) & desc_pos;
+            let t1 = -b - desc_sqrt;
+            let t1_valid = t1.cmp_gt(f32x4::from(0.0001)) & t1.cmp_le(t_max) & desc_pos;
 
-            let t2 = (-b + desc_sqrt) / (f32x4::from(2.0) * a);
-            let t2_valid = t2.cmp_gt(t_range.start) & t2.cmp_le(t_range.end) & desc_pos;
+            let t2 = -b + desc_sqrt;
+            let t2_valid = t2.cmp_gt(f32x4::from(0.0001)) & t2.cmp_le(t_max) & desc_pos;
 
             let take_t1 = t1.cmp_lt(t2) & t1_valid;
 
@@ -84,8 +82,7 @@ impl<TR: WSequenced<Wec3>> Hitable for Sphere<TR> {
     fn get_shading_info(
         &self,
         hit: WHit,
-        _primary: bool,
-        _camera: &dyn Camera,
+        _half_pixel_size_at: &dyn Fn(f32x4) -> f32x4,
     ) -> (MaterialHandle, WShadingPoint) {
         let point = hit.point();
         let origin = WSequenced::sample_at(&self.transform_seq, hit.ray.time);

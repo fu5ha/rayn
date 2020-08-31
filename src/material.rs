@@ -211,7 +211,7 @@ impl BSDF for DielectricBSDF {
         let diffuse_bounce = (intersection.basis * diffuse_sample).normalized();
         // in this case diffuse_sample.z = diffuse_sample.dot(Wec3::unit_z())
         // because using intersection coordinate system basis
-        let diffuse_pdf = (diffuse_sample.z / f32x4::PI).max(f32x4::from(0.00001));
+        let diffuse_pdf = f32x4::from(0.00001).max(diffuse_sample.z / f32x4::PI);
         let diffuse_f = self.albedo / f32x4::PI;
 
         // spec part
@@ -448,6 +448,13 @@ impl<EG> Emissive<EG> {
     #[allow(dead_code)]
     pub fn new(emission_gen: EG) -> Self {
         Self { emission_gen }
+    }
+}
+
+impl Emissive<WSrgb> {
+    #[allow(dead_code)]
+    pub fn new_splat(emission: Srgb) -> Self {
+        Self { emission_gen: WSrgb::splat(emission) }
     }
 }
 

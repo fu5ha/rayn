@@ -39,6 +39,85 @@ impl CameraStore {
 }
 
 #[derive(Clone, Copy)]
+pub struct PinholeCamera<O, A, U> {
+    half_size: Wec2,
+    // tan(hfov/2) / resolution.h
+    half_pixel_size: f32x4,
+    origin: O,
+    at: A,
+    up: U,
+}
+
+impl<O, A, U> PinholeCamera<O, A, U> {
+    #[allow(dead_code)]
+    pub fn new(
+        resolution: Vec2,
+        vfov: f32,
+        origin: O,
+        at: A,
+        up: U,
+    ) -> Self {
+        let theta = vfov * std::f32::consts::PI / 180.0;
+        let half_height = (theta / 2.0).tan();
+        let aspect = resolution.x / resolution.y;
+        let half_width = aspect * half_height;
+        let half_pixel_size = f32x4::from(half_height / resolution.y);
+        PinholeCamera {
+            half_size: Wec2::splat(Vec2::new(half_width, half_height)),
+            half_pixel_size,
+            origin,
+            at,
+            up,
+        }
+    }
+}
+
+impl<O, A, U> Camera for PinholeCamera<O, A, U>
+where
+    O: WSequenced<Wec3>,
+    A: WSequenced<Wec3>,
+    U: WSequenced<Wec3>,
+{
+    fn get_rays(
+        &self,
+        scramble: f32,
+        sample_nums: [usize; 4],
+        tile_coord: Vec2u,
+        uv: Wec2,
+        time: f32x4,
+        _samples: &[f32x4; 2],
+    ) -> WRay {
+        let origin = self.origin.sample_at(time);
+        let at = self.at.sample_at(time);
+        let up = self.up.sample_at(time);
+
+        let basis_w = (origin - at).normalized();
+        let basis_u = up.cross(basis_w).normalized();
+        let basis_v = basis_w.cross(basis_u);
+        let lower_left = origin
+            - basis_u * self.half_size.x
+            - basis_v * self.half_size.y
+            - basis_w;
+
+        let horiz = basis_u * self.half_size.x * f32x4::from(2.0) * uv.x;
+        let verti = basis_v * self.half_size.y * f32x4::from(2.0) * uv.y;
+
+        WRay::new(
+            origin,
+            (lower_left + horiz + verti - origin).normalized(),
+            time,
+            [tile_coord, tile_coord, tile_coord, tile_coord],
+            [true, true, true, true],
+            [scramble, scramble, scramble, scramble],
+            sample_nums,
+        )
+    }
+
+    fn half_pixel_size_at(&self, t: f32x4) -> f32x4 {
+        self.half_pixel_size * t
+    }
+}
+#[derive(Clone, Copy)]
 pub struct ThinLensCamera<A, O, LA, U, F> {
     half_size: Wec2,
     // 2.0 * tan(hfov/2) / resolution.h / 2.0

@@ -536,15 +536,23 @@ impl<'a, N: ArrayLength<ChannelStorage> + ArrayLength<ChannelTileStorage>> Film<
 
                 hit_store.reset();
 
+                let half_pixel_size_at: Box<dyn Fn(f32x4) -> f32x4> = if depth == 0 {
+                    Box::new(#[inline] |t: f32x4| camera.half_pixel_size_at(t))
+                    // Box::new(|_t| f32x4::from(0.0001))
+                } else {
+                    Box::new(#[inline] |t| f32x4::from(0.0001 * 2.0 * depth as f32) * t)
+                };
+
                 for wray in spawned_wrays.drain(..) {
                     world.hitables.add_hits(
                         wray,
-                        f32x4::from(0.0001)..f32x4::from(500.0),
+                        f32x4::from(crate::WORLD_RADIUS * 2.0),
                         &mut hit_store,
+                        &half_pixel_size_at
                     );
                 }
 
-                hit_store.process_hits(&world.hitables, &mut wintersections, depth == 0, camera);
+                hit_store.process_hits(&world.hitables, &mut wintersections, &half_pixel_size_at);
 
                 for (mat_id, wshading_point) in wintersections.drain(..) {
                     let samples_1d = [

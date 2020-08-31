@@ -12,6 +12,7 @@ pub trait WSequenced<T>: Send + Sync {
 macro_rules! impl_inherent_sequenced {
     ($($type:ty,)*) => {
         $(impl Sequenced<$type> for $type {
+            #[inline]
             fn sample_at(&self, _t: f32) -> Self {
                 self.clone()
             }
@@ -22,6 +23,7 @@ macro_rules! impl_inherent_sequenced {
 macro_rules! impl_inherent_wsequenced {
     ($($type:ty,)*) => {
         $(impl WSequenced<$type> for $type {
+            #[inline]
             fn sample_at(&self, _t: f32x4) -> Self {
                 self.clone()
             }
@@ -32,6 +34,7 @@ macro_rules! impl_inherent_wsequenced {
 macro_rules! impl_wsequenced_for_sequenced {
     ($($type:ty => $wtype:ty),*) => {
         $(impl WSequenced<$wtype> for $type {
+            #[inline]
             fn sample_at(&self, t: f32x4) -> $wtype {
                 let ts = t.as_ref();
                 <$wtype>::from([
@@ -50,12 +53,14 @@ impl_inherent_wsequenced!(f32x4, Wec3, Wec2,);
 impl_wsequenced_for_sequenced!(f32 => f32x4, Vec2 => Wec2, Vec3 => Wec3);
 
 impl<T, F: Fn(f32) -> T + Send + Sync> Sequenced<T> for F {
+    #[inline]
     fn sample_at(&self, t: f32) -> T {
         self(t)
     }
 }
 
 impl<F: Fn(f32) -> Vec3 + Send + Sync> WSequenced<Wec3> for F {
+    #[inline]
     fn sample_at(&self, t: f32x4) -> Wec3 {
         let ts = t.as_ref();
         [self(ts[0]), self(ts[0]), self(ts[0]), self(ts[0])].into()
@@ -107,12 +112,14 @@ mod minterpolate_integration {
     }
 
     impl<T: InterpolationPrimitive + Clone + Send + Sync> Sequenced<T> for Sequence<T> {
+        #[inline]
         fn sample_at(&self, t: f32) -> T {
             self.sample(t)
         }
     }
 
     impl Sequenced<Vec3> for Sequence<[f32; 3]> {
+        #[inline]
         fn sample_at(&self, t: f32) -> Vec3 {
             Vec3::from(self.sample(t))
         }

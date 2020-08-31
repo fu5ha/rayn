@@ -1,4 +1,3 @@
-use crate::camera::Camera;
 use crate::material::MaterialHandle;
 use crate::math::{f32x4, OrthonormalBasis, Wat3, Wec3};
 use crate::ray::{Ray, WRay};
@@ -7,17 +6,14 @@ use bumpalo::collections::Vec as BumpVec;
 use bumpalo::Bump;
 
 pub trait Hitable: Send + Sync {
-    fn hit(&self, rays: &WRay, t_ranges: ::std::ops::Range<f32x4>) -> f32x4;
-    // return 0 if occluded, 1 if not
+    /// `hit_threshold_at` is a function which returns the hit threshold at some distance `t` from the start of the ray.
+    fn hit(&self, rays: &WRay, t_max: f32x4, hit_threshold_at: &dyn Fn(f32x4) -> f32x4) -> f32x4;
+    /// return 0 if occluded, 1 if not
     fn occluded(&self, start: Wec3, end: Wec3, time: f32x4) -> f32x4;
-    /// err is a function that takes a point and returns the error bound
-    /// at that point based on a screen-space projection (i.e. computes pixel size
-    /// at that point).
     fn get_shading_info(
         &self,
         hits: WHit,
-        primary: bool,
-        camera: &dyn Camera,
+        half_pixel_size_at: &dyn Fn(f32x4) -> f32x4,
     ) -> (MaterialHandle, WShadingPoint);
 }
 
@@ -99,8 +95,7 @@ impl<'bump> HitStore<'bump> {
         &mut self,
         hitables: &HitableStore,
         wintersections: &mut BumpVec<'_, (MaterialHandle, WShadingPoint)>,
-        primary: bool,
-        camera: &dyn Camera,
+        half_pixel_size_at: &dyn Fn(f32x4) -> f32x4,
     ) {
         let total_hits = self
             .hits
@@ -132,7 +127,7 @@ impl<'bump> HitStore<'bump> {
                 });
                 wintersections.push(
                     unsafe { hitables.get_unchecked(obj_id) }
-                        .get_shading_info(hits, primary, camera),
+                        .get_shading_info(hits, half_pixel_size_at),
                 );
             }
         }
@@ -175,15 +170,16 @@ impl HitableStore {
     pub fn add_hits(
         &self,
         ray: WRay,
-        t_ranges: ::std::ops::Range<f32x4>,
+        t_max: f32x4,
         hit_store: &mut HitStore,
+        half_pixel_size_at: &dyn Fn(f32x4) -> f32x4,
     ) {
         let (ids, dists) = self.iter().enumerate().fold(
-            ([std::usize::MAX; 4], t_ranges.end),
+            ([std::usize::MAX; 4], t_max),
             |acc, (hitable_id, hitable)| {
                 let (mut closest_ids, mut closest) = acc;
 
-                let t = hitable.hit(&ray, t_ranges.start..closest);
+                let t = hitable.hit(&ray, closest, half_pixel_size_at);
 
                 for ((t, closest), closest_id) in t
                     .as_ref()

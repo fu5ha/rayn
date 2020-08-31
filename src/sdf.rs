@@ -1,16 +1,12 @@
-use crate::camera::Camera;
 use crate::hitable::{Hitable, WHit, WShadingPoint};
 use crate::material::MaterialHandle;
 use crate::math::{f32x4, Wec3};
 use crate::ray::WRay;
-use ultraviolet::wide::*;
 
 use sdfu::*;
 
-const MAX_MARCHES: u32 = 1000;
+const MAX_MARCHES: u32 = 256;
 const MAX_VIS_MARCHES: u32 = 100;
-
-const_f32_as_f32x4!(EPSILON_MIN, 0.0001);
 
 pub struct TracedSDF<S> {
     sdf: S,
@@ -44,9 +40,12 @@ impl<S: SDF<f32x4, Wec3> + Send + Sync> Hitable for TracedSDF<S> {
             if gt_nan_mask.move_mask() == 0b1111 {
                 break;
             }
+
             let point = dir.mul_add(Wec3::broadcast(t), start);
             let dist = self.sdf.dist(point).abs();
-            hit_mask = dist.cmp_lt(f32x4::from(0.0001));
+
+            hit_mask = dist.cmp_lt(f32x4::from(0.0001 * crate::SDF_DETAIL_SCALE).max(f32x4::from(0.00001 * crate::SDF_DETAIL_SCALE) * t));
+
             let hit_gt_nan_mask = hit_mask | gt_nan_mask;
             if hit_gt_nan_mask.move_mask() == 0b1111 {
                 break;
@@ -56,21 +55,25 @@ impl<S: SDF<f32x4, Wec3> + Send + Sync> Hitable for TracedSDF<S> {
         f32x4::merge(hit_mask & !gt_nan_mask, f32x4::ZERO, f32x4::ONE)
     }
 
-    fn hit(&self, ray: &WRay, t_range: ::std::ops::Range<f32x4>) -> f32x4 {
+    fn hit(&self, ray: &WRay, t_max: f32x4, hit_threshold_at: &dyn Fn(f32x4) -> f32x4) -> f32x4 {
         let dist = self.sdf.dist(ray.origin).abs();
         let mut t = dist;
+
         let nan_mask = t.cmp_nan(t);
+
         for _march in 0..MAX_MARCHES {
-            let gt_mask = t.cmp_gt(t_range.end);
-            let gt_nan_mask = gt_mask | nan_mask;
-            if gt_nan_mask.move_mask() == 0b1111 {
-                break;
-            }
             let point = ray.point_at(t);
             let dist = self.sdf.dist(point).abs();
-            let hit_mask = dist.cmp_lt(t_range.start);
-            let hit_gt_nan_mask = hit_mask | gt_nan_mask;
+
+            let hit_mask = dist.cmp_lt(
+                f32x4::from(0.00005 * crate::SDF_DETAIL_SCALE)
+                    .max(f32x4::from(0.05 * crate::SDF_DETAIL_SCALE) * hit_threshold_at(t)));
+
+            let gt_mask = t.cmp_gt(t_max);
+            let hit_gt_nan_mask = hit_mask | nan_mask | gt_mask;
+
             t = f32x4::merge(hit_gt_nan_mask, t, t + dist);
+
             if hit_gt_nan_mask.move_mask() == 0b1111 {
                 break;
             }
@@ -81,24 +84,18 @@ impl<S: SDF<f32x4, Wec3> + Send + Sync> Hitable for TracedSDF<S> {
     fn get_shading_info(
         &self,
         hit: WHit,
-        primary: bool,
-        camera: &dyn Camera,
+        half_pixel_size_at: &dyn Fn(f32x4) -> f32x4,
     ) -> (MaterialHandle, WShadingPoint) {
         let point = hit.point();
-        let dist = self.sdf.dist(point).abs();
 
-        let normal_eps = if primary {
-            camera.half_pixel_size_at(hit.t)
-        } else {
-            f32x4::from(0.001)
-        };
+        let half_pixel_size = f32x4::from(0.0001).max(f32x4::from(crate::SDF_DETAIL_SCALE) * half_pixel_size_at(hit.t));
 
-        let normals = self.sdf.normals_fast(normal_eps);
+        let normals = self.sdf.normals_fast(half_pixel_size);
 
         let normal = normals.normal_at(point);
         (
             self.material,
-            WShadingPoint::new(hit, point, f32x4::from(2.0) * EPSILON_MIN.max(dist), normal),
+            WShadingPoint::new(hit, point, half_pixel_size, normal),
         )
     }
 }
@@ -135,10 +132,8 @@ impl SDF<f32x4, Wec3> for MandelBox {
 
             p = p.mul_add(self.scale_vec, offset);
             dr = (-dr).mul_add(self.scale, one);
-            // dr = dr.mul_add(self.scale, one);
         }
 
-        // let d = (p.mag() - f32x4::from(3.0)) / dr.abs() * f32x4::from(0.25);
         let d = p.mag() / dr.abs();
         d
     }
@@ -185,7 +180,7 @@ impl SphereFold {
     pub fn sphere_fold(&self, point: &mut Wec3, dr: &mut f32x4) {
         let r2 = point.mag_sq();
 
-        let mul = (self.fixed_rad_sq / self.min_rad_sq.max(r2)).max(f32x4::ONE);
+        let mul = f32x4::ONE.max(self.fixed_rad_sq / self.min_rad_sq.max(r2));
         *point *= mul;
         *dr *= mul;
     }
