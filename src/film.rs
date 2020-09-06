@@ -537,10 +537,16 @@ impl<'a, N: ArrayLength<ChannelStorage> + ArrayLength<ChannelTileStorage>> Film<
                 hit_store.reset();
 
                 let half_pixel_size_at: Box<dyn Fn(f32x4) -> f32x4> = if depth == 0 {
-                    Box::new(#[inline] |t: f32x4| camera.half_pixel_size_at(t))
-                    // Box::new(|_t| f32x4::from(0.0001))
+                    Box::new(
+                        #[inline]
+                        |t: f32x4| camera.half_pixel_size_at(t),
+                    )
+                // Box::new(|_t| f32x4::from(0.0001))
                 } else {
-                    Box::new(#[inline] |t| f32x4::from(0.0001 * 2.0 * depth as f32) * t)
+                    Box::new(
+                        #[inline]
+                        |t| f32x4::from(0.0001 * 2.0 * depth as f32) * t,
+                    )
                 };
 
                 for wray in spawned_wrays.drain(..) {
@@ -548,104 +554,39 @@ impl<'a, N: ArrayLength<ChannelStorage> + ArrayLength<ChannelTileStorage>> Film<
                         wray,
                         f32x4::from(crate::WORLD_RADIUS * 2.0),
                         &mut hit_store,
-                        &half_pixel_size_at
+                        &half_pixel_size_at,
                     );
                 }
 
                 hit_store.process_hits(&world.hitables, &mut wintersections, &half_pixel_size_at);
 
                 for (mat_id, wshading_point) in wintersections.drain(..) {
-                    let samples_1d = [
-                        sample_sets.wide_sample_1d_array(
+                    let mut samples_1d = [f32x4::ZERO; 5];
+                    let num_1d_samples = samples_1d.len();
+
+                    for (set, sample) in samples_1d.iter_mut().enumerate() {
+                        *sample = sample_sets.wide_sample_1d_array(
                             wshading_point.ray.sample,
                             wshading_point.ray.scramble,
-                            1 + depth * 3,
-                        ),
-                        sample_sets.wide_sample_1d_array(
+                            1 + set + depth * num_1d_samples,
+                        );
+                    }
+
+                    let mut samples_2d = [f32x4::ZERO; 28];
+                    let num_2d_samples = samples_2d.len();
+
+                    for (i, sample) in samples_2d.iter_mut().enumerate() {
+                        let dim = i % 2;
+                        let set = i / 2;
+
+                        *sample = sample_sets.wide_sample_2d_array(
+                            dim,
                             wshading_point.ray.sample,
                             wshading_point.ray.scramble,
-                            2 + depth * 3,
-                        ),
-                        sample_sets.wide_sample_1d_array(
-                            wshading_point.ray.sample,
-                            wshading_point.ray.scramble,
-                            3 + depth * 3,
-                        ),
-                    ];
-                    let samples_2d = [
-                        sample_sets.wide_sample_2d_array(
-                            0,
-                            wshading_point.ray.sample,
-                            wshading_point.ray.scramble,
-                            2 + depth * 6,
-                        ),
-                        sample_sets.wide_sample_2d_array(
-                            1,
-                            wshading_point.ray.sample,
-                            wshading_point.ray.scramble,
-                            2 + depth * 6,
-                        ),
-                        sample_sets.wide_sample_2d_array(
-                            0,
-                            wshading_point.ray.sample,
-                            wshading_point.ray.scramble,
-                            3 + depth * 6,
-                        ),
-                        sample_sets.wide_sample_2d_array(
-                            1,
-                            wshading_point.ray.sample,
-                            wshading_point.ray.scramble,
-                            3 + depth * 6,
-                        ),
-                        sample_sets.wide_sample_2d_array(
-                            0,
-                            wshading_point.ray.sample,
-                            wshading_point.ray.scramble,
-                            4 + depth * 6,
-                        ),
-                        sample_sets.wide_sample_2d_array(
-                            1,
-                            wshading_point.ray.sample,
-                            wshading_point.ray.scramble,
-                            4 + depth * 6,
-                        ),
-                        sample_sets.wide_sample_2d_array(
-                            0,
-                            wshading_point.ray.sample,
-                            wshading_point.ray.scramble,
-                            5 + depth * 6,
-                        ),
-                        sample_sets.wide_sample_2d_array(
-                            1,
-                            wshading_point.ray.sample,
-                            wshading_point.ray.scramble,
-                            5 + depth * 6,
-                        ),
-                        sample_sets.wide_sample_2d_array(
-                            0,
-                            wshading_point.ray.sample,
-                            wshading_point.ray.scramble,
-                            6 + depth * 6,
-                        ),
-                        sample_sets.wide_sample_2d_array(
-                            1,
-                            wshading_point.ray.sample,
-                            wshading_point.ray.scramble,
-                            6 + depth * 6,
-                        ),
-                        sample_sets.wide_sample_2d_array(
-                            0,
-                            wshading_point.ray.sample,
-                            wshading_point.ray.scramble,
-                            7 + depth * 6,
-                        ),
-                        sample_sets.wide_sample_2d_array(
-                            1,
-                            wshading_point.ray.sample,
-                            wshading_point.ray.scramble,
-                            7 + depth * 6,
-                        ),
-                    ];
+                            2 + set + depth * num_2d_samples / 2,
+                        );
+                    }
+
                     integrator.integrate(
                         world,
                         &samples_1d,

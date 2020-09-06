@@ -134,8 +134,8 @@ impl<'bump> HitStore<'bump> {
     }
 
     pub fn reset(&mut self) {
-        for shading_points in self.hits.iter_mut() {
-            shading_points.clear();
+        for hit in self.hits.iter_mut() {
+            hit.clear();
         }
     }
 }

@@ -19,7 +19,7 @@ pub trait BSDF {
         intersection: &WShadingPoint,
         samples_1d: f32x4,
         samples_2d: &[f32x4; 4],
-    ) -> Option<WScatteringEvent>;
+    ) -> WScatteringEvent;
 
     fn f(&self, wo: Wec3, wi: Wec3, n: Wec3) -> WSrgb;
 
@@ -43,6 +43,15 @@ pub struct WScatteringEvent {
     pub pdf: f32x4,
 }
 
+impl Default for WScatteringEvent {
+    fn default() -> Self {
+        WScatteringEvent {
+            wi: Wec3::new_splat(0.0, 0.0, 0.0),
+            f: WSrgb::new_splat(0.0, 0.0, 0.0),
+            pdf: f32x4::from(0.0),
+        }
+    }
+}
 #[derive(Clone, Copy, Debug)]
 pub struct MaterialHandle(pub usize);
 
@@ -112,7 +121,7 @@ impl BSDF for LambertianBSDF {
         intersection: &WShadingPoint,
         _samples_1d: f32x4,
         samples_2d: &[f32x4; 4],
-    ) -> Option<WScatteringEvent> {
+    ) -> WScatteringEvent {
         let diffuse_sample = Wec3::cosine_weighted_in_hemisphere(array_ref![samples_2d, 0, 2]);
         let diffuse_bounce = (intersection.basis * diffuse_sample).normalized();
         // in this case diffuse_sample.z = diffuse_sample.dot(Wec3::unit_z())
@@ -120,11 +129,11 @@ impl BSDF for LambertianBSDF {
         let diffuse_pdf = diffuse_sample.z / f32x4::from(PI);
         let diffuse_f = self.albedo / f32x4::from(PI);
 
-        Some(WScatteringEvent {
+        WScatteringEvent {
             wi: diffuse_bounce,
             f: diffuse_f,
             pdf: diffuse_pdf,
-        })
+        }
     }
 
     fn f(&self, _wi: Wec3, _wo: Wec3, _n: Wec3) -> WSrgb {
@@ -201,7 +210,7 @@ impl BSDF for DielectricBSDF {
         intersection: &WShadingPoint,
         samples_1d: f32x4,
         samples_2d: &[f32x4; 4],
-    ) -> Option<WScatteringEvent> {
+    ) -> WScatteringEvent {
         let norm = intersection.normal;
         let cos = norm.dot(wo).abs();
         let two = f32x4::from(2.0);
@@ -239,11 +248,11 @@ impl BSDF for DielectricBSDF {
         let fresnel_sample = f32x4::from(samples_1d);
         let fresnel_mask = fresnel_sample.cmp_lt(fresnel);
 
-        Some(WScatteringEvent {
+        WScatteringEvent {
             wi: Wec3::merge(fresnel_mask, spec_bounce, diffuse_bounce),
             f: WSrgb::merge(fresnel_mask, spec_f, diffuse_f),
             pdf: fresnel * spec_pdf + (f32x4::ONE - fresnel) * diffuse_pdf,
-        })
+        }
     }
 }
 
@@ -428,8 +437,8 @@ impl BSDF for SkyBSDF {
         _intersection: &WShadingPoint,
         _samples_1d: f32x4,
         _samples_2d: &[f32x4; 4],
-    ) -> Option<WScatteringEvent> {
-        None
+    ) -> WScatteringEvent {
+        WScatteringEvent::default()
     }
 
     fn le(&self, wo: Wec3, _intersection: &WShadingPoint) -> WSrgb {
@@ -454,7 +463,9 @@ impl<EG> Emissive<EG> {
 impl Emissive<WSrgb> {
     #[allow(dead_code)]
     pub fn new_splat(emission: Srgb) -> Self {
-        Self { emission_gen: WSrgb::splat(emission) }
+        Self {
+            emission_gen: WSrgb::splat(emission),
+        }
     }
 }
 
@@ -500,7 +511,7 @@ where
         intersection: &WShadingPoint,
         samples_1d: f32x4,
         samples_2d: &[f32x4; 4],
-    ) -> Option<WScatteringEvent> {
+    ) -> WScatteringEvent {
         self.inner.scatter(wo, intersection, samples_1d, samples_2d)
     }
 

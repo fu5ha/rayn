@@ -4,7 +4,7 @@ use bumpalo::Bump;
 use crate::film::ChannelSample;
 use crate::hitable::WShadingPoint;
 use crate::material::{MaterialHandle, BSDF};
-use crate::math::{f32x4, Vec2u, Vec3};
+use crate::math::{f32x4, Vec2u, Vec3, Wec3};
 use crate::ray::Ray;
 use crate::spectrum::{Srgb, WSrgb};
 use crate::world::World;
@@ -14,8 +14,8 @@ pub trait Integrator: Send + Sync {
     fn integrate(
         &self,
         world: &World,
-        samples_1d: &[f32x4; 3],
-        samples_2d: &[f32x4; 12],
+        samples_1d: &[f32x4; 5],
+        samples_2d: &[f32x4; 28],
         depth: usize,
         material: MaterialHandle,
         intersection: WShadingPoint,
@@ -31,22 +31,23 @@ pub trait Integrator: Send + Sync {
 #[derive(Clone, Copy)]
 pub struct PathTracingIntegrator {
     pub max_bounces: usize,
+    pub volume_marches: usize,
 }
 
 impl Integrator for PathTracingIntegrator {
     fn requested_1d_sample_sets(&self) -> usize {
-        (self.max_bounces + 1) * 3
+        (self.max_bounces + 1) * (3 + self.volume_marches)
     }
 
     fn requested_2d_sample_sets(&self) -> usize {
-        (self.max_bounces + 1) * 6
+        (self.max_bounces + 1) * (6 + 4 * self.volume_marches)
     }
 
     fn integrate(
         &self,
         world: &World,
-        samples_1d: &[f32x4; 3],
-        samples_2d: &[f32x4; 12],
+        samples_1d: &[f32x4; 5],
+        samples_2d: &[f32x4; 28],
         depth: usize,
         material: MaterialHandle,
         mut intersection: WShadingPoint,
@@ -59,36 +60,88 @@ impl Integrator for PathTracingIntegrator {
 
         let bsdf = material.get_bsdf_at(&intersection, bump);
 
-        intersection.ray.radiance += bsdf.le(wo, &intersection) * intersection.ray.throughput;
+        let volume_transmission = if let Some(rho_t) = world.volume_params.coeff_extinction {
+            (f32x4::from(-rho_t) * intersection.t).exp()
+        } else {
+            f32x4::ONE
+        };
+
+        intersection.ray.radiance +=
+            bsdf.le(wo, &intersection) * intersection.ray.throughput * volume_transmission;
 
         if bsdf.receives_light() && world.lights.len() > 0 {
-            let lights = (samples_1d[0] * f32x4::from(world.lights.len() as f32)).floor();
+            // let light_idx =
+            //     (samples_1d[0].as_ref()[0] * (world.lights.len() as f32)).floor() as usize;
+            let lights_to_sample = (samples_1d[0] * f32x4::from(world.lights.len() as f32)).floor();
+            let lights_to_sample = lights_to_sample.as_ref().iter().map(|i| *i as usize);
 
-            let lights = lights.as_ref().iter().map(|i| *i as usize);
+            let correction_factor =
+                f32x4::from(world.lights.len() as f32 / lights_to_sample.len() as f32);
 
-            for (i, light_idx) in lights.enumerate() {
-                // let (i, light_idx) = (0, lights.next().unwrap());
-                intersection.ray.radiance += sample_one_light(
+            for (i, light_idx) in lights_to_sample.enumerate() {
+                let li = surface_sample_one_light(
                     world,
                     light_idx,
                     arrayref::array_ref![samples_2d, 0 + i * 2, 2],
                     &intersection,
                     bsdf,
                 );
+
+                intersection.ray.radiance +=
+                    li * intersection.ray.throughput * correction_factor * volume_transmission;
             }
         }
 
-        let scattering_event = bsdf.scatter(
-            wo,
-            &intersection,
-            samples_1d[1],
-            arrayref::array_ref![samples_2d, 8, 4],
-        );
+        if let Some(rho_s) = world.volume_params.coeff_scattering {
+            let rho_s = f32x4::from(rho_s);
 
-        if let Some(se) = scattering_event {
+            for march in 0..self.volume_marches {
+                let lights_to_sample =
+                    (samples_1d[march + 1] * f32x4::from(world.lights.len() as f32)).floor();
+                let lights_to_sample = lights_to_sample.as_ref().iter().map(|i| *i as usize);
+
+                let correction_factor = f32x4::from(
+                    world.lights.len() as f32
+                        / lights_to_sample.len() as f32
+                        / self.volume_marches as f32,
+                );
+
+                for (i, light_idx) in lights_to_sample.enumerate() {
+                    let (li, t) = volume_sample_one_light(
+                        world,
+                        light_idx,
+                        arrayref::array_ref![samples_2d, 4 + 4 * march + i * 2, 2],
+                        samples_1d[1],
+                        intersection.ray.origin,
+                        intersection.ray.dir,
+                        intersection.t,
+                        intersection.ray.time,
+                    );
+
+                    let transmission = if let Some(rho_t) = world.volume_params.coeff_extinction {
+                        (f32x4::from(-rho_t) * t).exp()
+                    } else {
+                        f32x4::ONE
+                    };
+
+                    intersection.ray.radiance +=
+                        li * intersection.ray.throughput * correction_factor * rho_s * transmission;
+                }
+            }
+        }
+
+        if bsdf.receives_light() {
+            let se = bsdf.scatter(
+                wo,
+                &intersection,
+                samples_1d[3],
+                arrayref::array_ref![samples_2d, 2, 4],
+            );
+
             let ndl = se.wi.dot(intersection.normal).abs();
 
-            let mut new_throughput = intersection.ray.throughput * se.f / se.pdf * ndl;
+            let mut new_throughput =
+                intersection.ray.throughput * volume_transmission * se.f * ndl / se.pdf;
 
             let roulette_factor = if depth > 2 {
                 let roulette_factor =
@@ -118,7 +171,7 @@ impl Integrator for PathTracingIntegrator {
                 .iter_mut()
                 .zip(throughputs.iter())
                 .zip(roulette_factor.as_ref().iter())
-                .zip(samples_1d[2].as_ref().iter())
+                .zip(samples_1d[4].as_ref().iter())
             {
                 if ray.valid {
                     if depth >= self.max_bounces || *roulette_sample < *roulette_factor {
@@ -150,27 +203,78 @@ impl Integrator for PathTracingIntegrator {
     }
 }
 
-pub fn sample_one_light(
+pub fn surface_sample_one_light(
     world: &World,
     light_idx: usize,
     samples: &[f32x4; 2],
     intersection: &WShadingPoint,
     bsdf: &dyn BSDF,
 ) -> WSrgb {
-    let (end_point, li, pdf) =
-        world.lights[light_idx].sample(samples, intersection.point, intersection.normal);
+    let (end_point, li, pdf) = world.lights[light_idx].sample(samples, intersection.point);
 
     let wo = -intersection.ray.dir;
-    let wi = (end_point - intersection.point).normalized();
+    let wi = end_point - intersection.point;
+    let dist = wi.mag();
+    let wi = wi / dist;
 
+    // Offset from surface to avoid shadow acne
     let occlude_point = intersection.point
         + intersection.normal * intersection.normal.dot(wi).signum() * intersection.offset_by;
+
+    // check occlusion
     let occluded = world
         .hitables
         .test_occluded(occlude_point, end_point, intersection.ray.time);
 
     let f = bsdf.f(wo, wi, intersection.normal) * intersection.normal.dot(wi).max(f32x4::ZERO);
-    li * f * f32x4::from(world.lights.len() as f32 / 4.0) / pdf
-        * intersection.ray.throughput
-        * occluded
+
+    // volume transmission
+    let transmission = if let Some(rho_t) = world.volume_params.coeff_extinction {
+        (f32x4::from(-rho_t) * dist).exp()
+    } else {
+        f32x4::ONE
+    };
+
+    li * f * transmission * occluded / pdf
+}
+
+pub fn volume_sample_one_light(
+    world: &World,
+    light_idx: usize,
+    light_samples: &[f32x4; 2],
+    volume_sample: f32x4,
+    ray_o: Wec3,
+    ray_d: Wec3,
+    max_distance: f32x4,
+    time: f32x4,
+) -> (WSrgb, f32x4) {
+    let light = &world.lights[light_idx];
+
+    let (vol_sample_dist, vol_sample_pdf) =
+        light.sample_volume_scattering(volume_sample, ray_o, ray_d, max_distance);
+
+    let sampled_point = ray_o + ray_d * vol_sample_dist;
+
+    let (end_point, li, light_pdf) = light.sample(light_samples, sampled_point);
+
+    let wi = end_point - sampled_point;
+    let dist_point_to_light = wi.mag();
+    // let wi = wi / dist;
+
+    // check occlusion
+    let occluded = world.hitables.test_occluded(sampled_point, end_point, time);
+
+    let f = f32x4::ONE / (f32x4::from(4.0) * f32x4::PI);
+
+    // volume transmission
+    let transmission = if let Some(rho_t) = world.volume_params.coeff_extinction {
+        (f32x4::from(-rho_t) * dist_point_to_light).exp()
+    } else {
+        f32x4::ONE
+    };
+
+    (
+        li * f * transmission * occluded / (vol_sample_pdf * light_pdf),
+        vol_sample_dist,
+    )
 }
