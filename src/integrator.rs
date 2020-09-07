@@ -8,14 +8,15 @@ use crate::math::{f32x4, Vec2u, Vec3, Wec3};
 use crate::ray::Ray;
 use crate::spectrum::{Srgb, WSrgb};
 use crate::world::World;
+use crate::VOLUME_MARCHES_PER_SAMPLE;
 
 pub trait Integrator: Send + Sync {
     #[allow(clippy::too_many_arguments)]
     fn integrate(
         &self,
         world: &World,
-        samples_1d: &[f32x4; 5],
-        samples_2d: &[f32x4; 28],
+        samples_1d: &[f32x4; 3 + VOLUME_MARCHES_PER_SAMPLE],
+        samples_2d: &[f32x4; 12 + 8 * VOLUME_MARCHES_PER_SAMPLE],
         depth: usize,
         material: MaterialHandle,
         intersection: WShadingPoint,
@@ -40,14 +41,14 @@ impl Integrator for PathTracingIntegrator {
     }
 
     fn requested_2d_sample_sets(&self) -> usize {
-        (self.max_bounces + 1) * (6 + 4 * self.volume_marches)
+        (self.max_bounces + 1) * (12 + 8 * self.volume_marches)
     }
 
     fn integrate(
         &self,
         world: &World,
-        samples_1d: &[f32x4; 5],
-        samples_2d: &[f32x4; 28],
+        samples_1d: &[f32x4; 3 + VOLUME_MARCHES_PER_SAMPLE],
+        samples_2d: &[f32x4; 12 + 8 * VOLUME_MARCHES_PER_SAMPLE],
         depth: usize,
         material: MaterialHandle,
         mut intersection: WShadingPoint,
@@ -110,7 +111,7 @@ impl Integrator for PathTracingIntegrator {
                     let (li, t) = volume_sample_one_light(
                         world,
                         light_idx,
-                        arrayref::array_ref![samples_2d, 4 + 4 * march + i * 2, 2],
+                        arrayref::array_ref![samples_2d, 8 + 8 * march + i * 2, 2],
                         samples_1d[1],
                         intersection.ray.origin,
                         intersection.ray.dir,
@@ -135,7 +136,7 @@ impl Integrator for PathTracingIntegrator {
                 wo,
                 &intersection,
                 samples_1d[3],
-                arrayref::array_ref![samples_2d, 2, 4],
+                arrayref::array_ref![samples_2d, 8 + 8 * self.volume_marches, 4],
             );
 
             let ndl = se.wi.dot(intersection.normal).abs();

@@ -38,6 +38,7 @@ use std::time::Instant;
 
 const RES: (usize, usize) = (1280, 720);
 const SAMPLES: usize = 2;
+const VOLUME_MARCHES_PER_SAMPLE: usize = 2;
 const WORLD_RADIUS: f32 = 100.0;
 
 // closer to 0 = smaller detail will be shown. larger means less detail.
@@ -49,11 +50,9 @@ fn setup() -> (CameraHandle, World) {
     let mut lights: Vec<Box<dyn Light>> = Vec::new();
 
     // VOLUMETRICS
-
-    // Isotropic, homogeneous volume parameters.
     let volume_params = VolumeParams {
-        coeff_scattering: Some(0.2),
-        coeff_extinction: None,
+        coeff_scattering: Some(0.25),
+        coeff_extinction: Some(0.03),
     };
 
     // SKY
@@ -74,24 +73,25 @@ fn setup() -> (CameraHandle, World) {
         grey,
     ));
 
-    // SUN
-    // let bluesun = Srgb::new(1.5, 3.0, 5.0) * 5000.0;
+    // SUN (doesn't work very well with volumetrics yet)
+    // let bluesun = Srgb::new(1.5, 3.0, 5.0) * 30000.0;
     // lights.push(Box::new(SphereLight::new(
-    //     Vec3::new(-1.0, 2.65, 1.5).normalized() * 99.0,
+    //     Vec3::new(-1.0, 2.65, 2.0).normalized() * 99.0,
     //     1.0,
     //     bluesun,
     // )));
 
-    let pink = Srgb::new(4.5, 1.5, 3.0) * 4.0;
-    let blue = Srgb::new(1.5, 3.0, 4.5) * 4.0;
-    let blue_emissive = materials.add_material(Emissive::new_splat(blue / 4.0));
-    let pink_emissive = materials.add_material(Emissive::new_splat(pink / 4.0));
+    // OTHER LIGHTS
+    let pink = Srgb::new(4.5, 1.5, 3.0) * 20.0;
+    let blue = Srgb::new(1.5, 3.0, 4.5) * 20.0;
+    let blue_emissive = materials.add_material(Emissive::new_splat(Srgb(blue.normalized() * 3.0)));
+    let pink_emissive = materials.add_material(Emissive::new_splat(Srgb(pink.normalized() * 3.0)));
 
     let light_pairs = [
-        (Vec3::new(0.0, 0.6, 2.5), 0.15),
-        (Vec3::new(2.0, -0.7, 2.0), 0.25),
-        (Vec3::new(3.0, 0.5, 3.0), 0.10),
-        (Vec3::new(2.5, -0.6, 0.0), 0.15),
+        (Vec3::new(0.0, 0.6, 2.5), 0.15 / 3.0),
+        (Vec3::new(2.0, -0.7, 2.0), 0.2 / 3.0),
+        (Vec3::new(3.0, 0.5, 3.0), 0.10 / 3.0),
+        (Vec3::new(2.5, -0.6, 0.0), 0.15 / 3.0),
     ];
 
     for &(pos, rad) in light_pairs.iter() {
@@ -103,6 +103,7 @@ fn setup() -> (CameraHandle, World) {
         hitables.push(Sphere::new(pos, rad - 0.01, blue_emissive));
     }
 
+    // CAMERA
     let res = Vec2::new(RES.0 as f32, RES.1 as f32);
     // 1
     // let camera = OrthographicCamera::new(
@@ -164,7 +165,7 @@ fn main() {
     // let filter = BoxFilter::default();
     let integrator = PathTracingIntegrator {
         max_bounces: 5,
-        volume_marches: 2,
+        volume_marches: VOLUME_MARCHES_PER_SAMPLE,
     };
 
     for frame in frame_range {

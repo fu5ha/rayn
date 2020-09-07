@@ -13,6 +13,7 @@ use crate::ray::{Ray, WRay};
 use crate::sampler::Samples;
 use crate::spectrum::Srgb;
 use crate::world::World;
+use crate::VOLUME_MARCHES_PER_SAMPLE;
 
 use std::collections::hash_map::HashMap;
 use std::ops::Range;
@@ -561,7 +562,7 @@ impl<'a, N: ArrayLength<ChannelStorage> + ArrayLength<ChannelTileStorage>> Film<
                 hit_store.process_hits(&world.hitables, &mut wintersections, &half_pixel_size_at);
 
                 for (mat_id, wshading_point) in wintersections.drain(..) {
-                    let mut samples_1d = [f32x4::ZERO; 5];
+                    let mut samples_1d = [f32x4::ZERO; 3 + VOLUME_MARCHES_PER_SAMPLE];
                     let num_1d_samples = samples_1d.len();
 
                     for (set, sample) in samples_1d.iter_mut().enumerate() {
@@ -572,7 +573,7 @@ impl<'a, N: ArrayLength<ChannelStorage> + ArrayLength<ChannelTileStorage>> Film<
                         );
                     }
 
-                    let mut samples_2d = [f32x4::ZERO; 28];
+                    let mut samples_2d = [f32x4::ZERO; 12 + 8 * VOLUME_MARCHES_PER_SAMPLE];
                     let num_2d_samples = samples_2d.len();
 
                     for (i, sample) in samples_2d.iter_mut().enumerate() {
