@@ -27,6 +27,7 @@ This is a CPU-based path tracing renderer focused on rendering SDFs, specificall
 *If you wish to use them for commercial purposes, contact me and we can work out a license.*
 
 
+![demo7](/render7.jpg?raw=true)
 ![demo1](/render1.png?raw=true)
 *Full 8k resolution image of this render [available here](https://live.staticflickr.com/65535/49550233828_4a967c0d7c_o_d.png).*
 ![demo2](/render2.png?raw=true)
