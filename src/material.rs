@@ -442,10 +442,9 @@ impl BSDF for SkyBSDF {
     }
 
     fn le(&self, wo: Wec3, _intersection: &WShadingPoint) -> WSrgb {
-        let dir = -wo;
-        let t = f32x4::from(0.5) * (dir.y + f32x4::ONE);
+        let t = f32x4::from(0.5) * (wo.y + f32x4::ONE);
 
-        self.bottom * (f32x4::ONE - t) + self.top * t
+        self.top * (f32x4::ONE - t) + self.bottom * t
     }
 }
 

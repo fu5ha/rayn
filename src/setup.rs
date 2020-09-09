@@ -53,8 +53,10 @@ pub fn setup() -> (CameraHandle, World) {
     // these values or change them to None to disable that kind of volumetric effect.
     // Setting both to None will make the render significantly faster.
     let volume_params = VolumeParams {
+        // coeff_scattering: None,
+        // coeff_extinction: None,
         coeff_scattering: Some(0.25),
-        coeff_extinction: Some(0.03),
+        coeff_extinction: Some(0.035),
     };
 
     // SKY
@@ -62,8 +64,8 @@ pub fn setup() -> (CameraHandle, World) {
         // You can change the following numbers to change the color of the sky. The first Srgb color is the
         // color of the top of the skydome while the second number is the color of the bottom... they will be
         // smoothly blended together towards the middle.
-        Srgb::new(0.3, 0.2, 0.6) * 2.5,
-        Srgb::new(0.5, 0.3, 0.6) * 1.0,
+        Srgb::new(0.3, 0.4, 0.6),
+        Srgb::new(0.2, 0.3, 0.6) * 0.05,
     ));
 
     hitables.push(Sphere::new(Vec3::new(0.0, 0.0, 0.0), WORLD_RADIUS, sky));
@@ -79,7 +81,7 @@ pub fn setup() -> (CameraHandle, World) {
         // It can also make the fractal significantly grow or shrink, so you might have to move the camera in tandem with changing these settings
         // to get a good look!
         // MandelBox::new(FRACTAL_ITERATIONS, BoxFold::new(1.0), SphereFold::new(0.5, 1.0), -2.0)
-        MandelBox::new(FRACTAL_ITERATIONS, BoxFold::new(1.5), SphereFold::new(0.1, 1.5), -2.25),
+        MandelBox::new(FRACTAL_ITERATIONS, BoxFold::new(1.0), SphereFold::new(0.01, 1.9), -2.1),
         grey,
     ));
 
@@ -88,35 +90,36 @@ pub fn setup() -> (CameraHandle, World) {
     // but if you disable volumetrics then feel free to uncomment the below and play with it!
     // let bluesun = Srgb::new(1.5, 3.0, 5.0) * 30000.0;
     // lights.push(Box::new(SphereLight::new(
-    //     Vec3::new(-1.0, 2.65, 2.0).normalized() * 99.0,
+    //     Vec3::new(-2.0, 2.65, 1.0).normalized() * 99.0,
     //     1.0,
     //     bluesun,
     // )));
 
     // OTHER LIGHTS
     // Try playing with the colors below to change the colors of the lights.
-    let pink = Srgb::new(4.5, 1.5, 3.0) * 20.0;
-    let blue = Srgb::new(1.5, 3.0, 4.5) * 20.0;
-    let blue_emissive = materials.add_material(Emissive::new_splat(Srgb(blue.normalized() * 3.0)));
-    let pink_emissive = materials.add_material(Emissive::new_splat(Srgb(pink.normalized() * 3.0)));
+    let green = Srgb::new(1.5, 4.5, 3.0).normalized();
+    let blue = Srgb::new(1.5, 3.0, 4.5).normalized();
+    let blue_emissive = materials.add_material(Emissive::new_splat(blue * 3.0));
+    let green_emissive = materials.add_material(Emissive::new_splat(green * 3.0));
 
     // This defines a position and size for pairs of lights, which gets used in the for loop below.
     // Try playing with the positions and sizes :)
     let light_pairs = [
-        (Vec3::new(0.0, 0.6, 2.5), 0.15 / 3.0),
-        (Vec3::new(2.0, -0.7, 2.0), 0.2 / 3.0),
-        (Vec3::new(3.0, 0.5, 3.0), 0.10 / 3.0),
-        (Vec3::new(2.5, -0.6, 0.0), 0.15 / 3.0),
+        (Vec3::new(1.2, -1.2, 1.2), 0.15),
+        (Vec3::new(-1.2, 1.2, 1.2), 0.15),
     ];
 
     for &(pos, rad) in light_pairs.iter() {
-        let mut pink_pos = pos;
-        pink_pos.y *= -1.0;
-        lights.push(Box::new(SphereLight::new(pink_pos, rad, pink)));
-        lights.push(Box::new(SphereLight::new(pos, rad, blue)));
-        hitables.push(Sphere::new(pink_pos, rad - 0.01, pink_emissive));
+        let mut green_pos = pos;
+        green_pos.y *= -1.0;
+        lights.push(Box::new(SphereLight::new(green_pos, rad, green * 40.0)));
+        lights.push(Box::new(SphereLight::new(pos, rad, blue * 40.0)));
+        hitables.push(Sphere::new(green_pos, rad - 0.01, green_emissive));
         hitables.push(Sphere::new(pos, rad - 0.01, blue_emissive));
     }
+
+    lights.push(Box::new(SphereLight::new(Vec3::zero(), 0.25, green * 20.0)));
+    hitables.push(Sphere::new(Vec3::zero(), 0.24, green_emissive));
 
     // CAMERA
     let res = Vec2::new(RESOLUTION.w as f32, RESOLUTION.h as f32);
@@ -128,9 +131,9 @@ pub fn setup() -> (CameraHandle, World) {
         // The vertical FOV, in degrees, of the camera.
         60.0,
         // The origin, i.e. position of the camera
-        Vec3::new(1.5, -0.4, 2.0) * 2.25,
+        Vec3::new(-0.45, 0.2, 2.0) * 2.25,
         // The location that the camera is pointing *at*
-        Vec3::new(0.0, 0.5, 0.0),
+        Vec3::new(0.0, 0.0, 0.0),
         // The direction that the camera will try to align its "up" orientation to.
         // Generally you can leave this as is, unless you want to make a camera that is
         // pointing straight up or down, or if you want to rotate the camera

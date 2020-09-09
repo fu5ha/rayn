@@ -39,6 +39,18 @@ macro_rules! srgbs {
                 )
             }
 
+            #[allow(dead_code)]
+            pub fn normalize(&mut self) {
+                self.0.normalize();
+            }
+
+            #[allow(dead_code)]
+            pub fn normalized(&self) -> Self {
+                let mut s = *self;
+                s.normalize();
+                s
+            }
+
             pub fn zero() -> Self {
                 $n($vt::zero())
             }
