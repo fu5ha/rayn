@@ -1,4 +1,4 @@
-use vek::ops::Lerp;
+use sdfu::mathtypes::Lerp;
 
 use crate::math::CDF;
 
@@ -200,7 +200,7 @@ impl FilterImportanceSampler {
 
         for n in 0..FILTER_TABLE_SIZE {
             let t = n as f32 / (FILTER_TABLE_SIZE - 1) as f32;
-            let d = Lerp::lerp(0.0, f_rad, t);
+            let d = 0.0.lerp(f_rad, t);
             cdf.insert(d, filter.evaluate(d));
         }
 
@@ -231,6 +231,6 @@ impl FilterImportanceSampler {
         let idx = idx_full.floor() as usize;
         let t = idx_full.fract();
 
-        mult * Lerp::lerp(self.inverse_cdf[idx], self.inverse_cdf[idx + 1], t)
+        mult * self.inverse_cdf[idx].lerp(self.inverse_cdf[idx + 1], t)
     }
 }

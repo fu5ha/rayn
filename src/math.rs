@@ -4,17 +4,37 @@ use std::f32::consts::PI;
 pub use ultraviolet::f32x4;
 pub use ultraviolet::Lerp;
 
-use vek::vec;
-
 pub type Vec3 = ultraviolet::Vec3;
 pub type Wec3 = ultraviolet::Wec3;
 pub type Vec2 = ultraviolet::Vec2;
 pub type Wec2 = ultraviolet::Wec2;
-pub type Vec2u = vec::repr_c::Vec2<usize>;
-pub type Aabru = vek::geom::repr_c::Aabr<usize>;
-pub type Extent2u = vek::vec::repr_c::Extent2<usize>;
+pub type Vec2u = ultraviolet::int::Vec2u;
 
 pub type Wat3 = ultraviolet::Wat3;
+
+#[derive(Clone, Copy, Debug)]
+pub struct Extent2u {
+    pub w: u32,
+    pub h: u32,
+}
+
+impl Extent2u {
+    pub const fn new(w: u32, h: u32) -> Self {
+        Self { w, h }
+    }
+}
+
+#[derive(Clone, Copy, Debug)]
+pub struct Bounds2u {
+    pub min: Vec2u,
+    pub max: Vec2u,
+}
+
+impl Bounds2u {
+    pub fn size(&self) -> Extent2u {
+        Extent2u::new(self.max.x - self.min.x, self.max.y - self.min.y)
+    }
+}
 
 #[derive(Clone, Copy)]
 pub struct Transform {

@@ -8,7 +8,7 @@ use crate::math::{f32x4, Vec2u, Vec3, Wec3};
 use crate::ray::Ray;
 use crate::spectrum::{Srgb, WSrgb};
 use crate::world::World;
-use crate::VOLUME_MARCHES_PER_SAMPLE;
+use crate::setup::VOLUME_MARCHES_PER_SAMPLE;
 
 pub trait Integrator: Send + Sync {
     #[allow(clippy::too_many_arguments)]

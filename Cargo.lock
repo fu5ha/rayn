@@ -7,12 +7,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "5d2e7343e7fc9de883d1b0341e0b13970f764c14101234857d2ddafa1cb1cac2"
 
 [[package]]
-name = "approx"
-version = "0.1.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "08abcc3b4e9339e33a3d0a5ed15d84a687350c05689d825e0f6655eef9e76a94"
-
-[[package]]
 name = "arrayref"
 version = "0.3.6"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -38,9 +32,9 @@ checksum = "2e8c087f005730276d1096a652e92a8bacee2e2472bcc9715a74d2bec38b5820"
 
 [[package]]
 name = "bytemuck"
-version = "0.1.2"
+version = "1.4.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "3b5389e57ef2cb21b174a28fddb1f83d53453342f7655a0a6d382bf6c2460b33"
+checksum = "92046dbb6f9332943252123f53623e0a6d513651af14967e2991c371ec20201c"
 
 [[package]]
 name = "byteorder"
@@ -198,7 +192,7 @@ dependencies = [
  "jpeg-decoder",
  "num-iter",
  "num-rational",
- "num-traits 0.2.9",
+ "num-traits",
  "png",
  "scoped_threadpool",
  "tiff",
@@ -277,7 +271,7 @@ dependencies = [
  "num-integer",
  "num-iter",
  "num-rational",
- "num-traits 0.2.9",
+ "num-traits",
 ]
 
 [[package]]
@@ -288,7 +282,7 @@ checksum = "f9c3f34cdd24f334cb265d9bf8bfa8a241920d026916785747a92f0e55541a1a"
 dependencies = [
  "autocfg",
  "num-integer",
- "num-traits 0.2.9",
+ "num-traits",
 ]
 
 [[package]]
@@ -298,7 +292,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "fcb0cf31fb3ff77e6d2a6ebd6800df7fdcd106f2ad89113c9130bcd07f93dffc"
 dependencies = [
  "autocfg",
- "num-traits 0.2.9",
+ "num-traits",
 ]
 
 [[package]]
@@ -319,7 +313,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "b85e541ef8255f6cf42bbfe4ef361305c6c135d10919ecc26126c4e5ae94bc09"
 dependencies = [
  "autocfg",
- "num-traits 0.2.9",
+ "num-traits",
 ]
 
 [[package]]
@@ -330,7 +324,7 @@ checksum = "76bd5272412d173d6bf9afdf98db8612bbabc9a7a830b7bfc9c188911716132e"
 dependencies = [
  "autocfg",
  "num-integer",
- "num-traits 0.2.9",
+ "num-traits",
 ]
 
 [[package]]
@@ -342,16 +336,7 @@ dependencies = [
  "autocfg",
  "num-bigint",
  "num-integer",
- "num-traits 0.2.9",
-]
-
-[[package]]
-name = "num-traits"
-version = "0.1.43"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "92e5113e9fd4cc14ded8e499429f396a20f98c772a47cc8622a736e1ec843c31"
-dependencies = [
- "num-traits 0.2.9",
+ "num-traits",
 ]
 
 [[package]]
@@ -425,7 +410,7 @@ source = "git+https://github.com/termhn/quasi-rd#ce117035e8bea4bb8f48ef692f7c7f1
 dependencies = [
  "num-bigint",
  "num-rational",
- "num-traits 0.2.9",
+ "num-traits",
 ]
 
 [[package]]
@@ -505,7 +490,6 @@ dependencies = [
  "sdfu",
  "splines",
  "ultraviolet",
- "vek",
 ]
 
 [[package]]
@@ -570,9 +554,9 @@ checksum = "b42e15e59b18a828bbf5c58ea01debb36b9b096346de35d941dcb89009f24a0d"
 
 [[package]]
 name = "sdfu"
-version = "0.2.0"
+version = "0.3.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "ec686b2fec5ba6c9297ce444e8774edf663af1bb3aa6cbc700f0e7692c5d7fb3"
+checksum = "a9d63ba6e0a1f700543f6e2a4078dc420c21715428088492ee8ec2267beb225c"
 dependencies = [
  "ultraviolet",
 ]
@@ -597,12 +581,6 @@ name = "splines"
 version = "2.2.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "19661e5f61c8c7e5e980737a63cab7281efdb68ca0de6172d4be86658c7d7114"
-
-[[package]]
-name = "static_assertions"
-version = "0.2.5"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "c19be23126415861cb3a23e501d34a708f7f9b2183c5252d690941c2e69199d5"
 
 [[package]]
 name = "syn"
@@ -636,7 +614,7 @@ dependencies = [
  "byteorder",
  "lzw",
  "num-derive",
- "num-traits 0.2.9",
+ "num-traits",
 ]
 
 [[package]]
@@ -658,9 +636,9 @@ checksum = "6d2783fe2d6b8c1101136184eb41be8b1ad379e4657050b8aaff0c79ee7575f9"
 
 [[package]]
 name = "ultraviolet"
-version = "0.3.0"
+version = "0.4.6"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "9a59df152ab0469c1ba1ca4483f3709476e7b1fa1936143abfbb11eecb1bb1ac"
+checksum = "432f35260aff6ee992f3027a1166eaebd7c6ebc0844188b0e545f7fa2121daf7"
 dependencies = [
  "wide",
 ]
@@ -672,19 +650,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "fc72304796d0818e357ead4e000d19c9c174ab23dc11093ac919054d20a6a7fc"
 
 [[package]]
-name = "vek"
-version = "0.9.10"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "2bb887880c4eb92359ae9abea055ddf60bfade4603bf9534f3c62c2707cb306b"
-dependencies = [
- "approx",
- "num-integer",
- "num-traits 0.1.43",
- "rustc_version",
- "static_assertions",
-]
-
-[[package]]
 name = "wasi"
 version = "0.7.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -692,12 +657,11 @@ checksum = "b89c3ce4ce14bdc6fb6beaf9ec7928ca331de5df7e5ea278375642a2f478570d"
 
 [[package]]
 name = "wide"
-version = "0.3.1"
+version = "0.4.6"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "df6a72c72d1a6145167b2d794979752a27f8c672adea160aa1feeef7eaf15542"
+checksum = "5825a3b8b18b67af1c24165f8ae1feb8f691222736d14099c3483effed2ea729"
 dependencies = [
  "bytemuck",
- "cfg-if",
 ]
 
 [[package]]

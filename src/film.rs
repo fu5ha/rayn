@@ -8,12 +8,12 @@ use crate::camera::CameraHandle;
 use crate::filter::{Filter, FilterImportanceSampler};
 use crate::hitable::HitStore;
 use crate::integrator::Integrator;
-use crate::math::{f32x4, Aabru, Extent2u, Vec2, Vec2u, Vec3, Wec2};
+use crate::math::{f32x4, Bounds2u, Extent2u, Vec2, Vec2u, Vec3, Wec2};
 use crate::ray::{Ray, WRay};
 use crate::sampler::Samples;
 use crate::spectrum::Srgb;
 use crate::world::World;
-use crate::VOLUME_MARCHES_PER_SAMPLE;
+use crate::setup::VOLUME_MARCHES_PER_SAMPLE;
 
 use std::collections::hash_map::HashMap;
 use std::ops::Range;
@@ -47,7 +47,7 @@ macro_rules! declare_channels {
             fn new(kind: ChannelKind, res: Extent2u) -> Self {
                 use ChannelKind::*;
                 match kind {
-                    $($name => Self::$name(vec![($initialize); res.w * res.h]),)+
+                    $($name => Self::$name(vec![($initialize); (res.w * res.h) as usize]),)+
                 }
             }
 
@@ -69,7 +69,7 @@ macro_rules! declare_channels {
             fn new(kind: ChannelKind, res: Extent2u) -> Self {
                 use ChannelKind::*;
                 match kind {
-                    $($name => Self::$name(vec![$initialize; res.w * res.h]),)+
+                    $($name => Self::$name(vec![$initialize; (res.w * res.h) as usize]),)+
                 }
             }
 
@@ -79,7 +79,7 @@ macro_rules! declare_channels {
                 }
             }
 
-            pub fn copy_from_tile(&mut self, other: &ChannelTileStorage, full_res: Extent2u, tile_bounds: Aabru, samples: usize) -> Result<(), ()> {
+            pub fn copy_from_tile(&mut self, other: &ChannelTileStorage, full_res: Extent2u, tile_bounds: Bounds2u, samples: usize) -> Result<(), ()> {
                 let extent = tile_bounds.size();
                 match (self, other) {
                     $( (ChannelStorage::$name(this_buf), ChannelTileStorage::$name(tile_buf)) => {
@@ -87,8 +87,8 @@ macro_rules! declare_channels {
                             for y in 0..extent.h {
                                 let tile_idx = x + y * extent.w;
                                 let this_idx = (tile_bounds.min.x + x) + (tile_bounds.min.y + y) * full_res.w;
-                                let tile_samp_sum = tile_buf[tile_idx];
-                                this_buf[this_idx] = tile_samp_sum / samples as f32;
+                                let tile_samp_sum = tile_buf[tile_idx as usize];
+                                this_buf[this_idx as usize] = tile_samp_sum / samples as f32;
                             }
                         }
                         Ok(())
@@ -133,7 +133,7 @@ pub struct Tile<N: ArrayLength<ChannelTileStorage>> {
     _index: usize,
     epoch: usize,
     channels: GenericArray<ChannelTileStorage, N>,
-    raster_bounds: Aabru,
+    raster_bounds: Bounds2u,
     raster_extent: Extent2u,
     screen_to_ndc_size: Vec2,
 }
@@ -144,7 +144,7 @@ impl<N: ArrayLength<ChannelTileStorage>> Tile<N> {
         epoch: usize,
         channels: IC,
         res: Extent2u,
-        raster_bounds: Aabru,
+        raster_bounds: Bounds2u,
     ) -> Self
     where
         IC: std::iter::ExactSizeIterator<Item = ChannelKind>,
@@ -167,7 +167,7 @@ impl<N: ArrayLength<ChannelTileStorage>> Tile<N> {
     pub fn add_sample(&mut self, tile_coord: Vec2u, sample: ChannelSample) {
         let idx = tile_coord.x + tile_coord.y * self.raster_extent.w;
         for channel in self.channels.iter_mut() {
-            channel.add_sample(idx, &sample);
+            channel.add_sample(idx as usize, &sample);
         }
     }
 }
@@ -231,11 +231,11 @@ impl<'a, N: ArrayLength<ChannelStorage>> Film<N> {
                             let color_buf = &channel_storage_index!(channels, Color, color_idx);
                             let alpha_buf = &channel_storage_index!(channels, Alpha, alpha_idx);
                             let mut img =
-                                image::RgbaImage::new(self.res.w as u32, self.res.h as u32);
+                                image::RgbaImage::new(self.res.w, self.res.h);
                             for (x, y, pixel) in img.enumerate_pixels_mut() {
-                                let idx = x as usize + (self.res.h - 1 - y as usize) * self.res.w;
-                                let col = color_buf[idx];
-                                let a = alpha_buf[idx];
+                                let idx = x + (self.res.h - 1 - y) * self.res.w;
+                                let col = color_buf[idx as usize];
+                                let a = alpha_buf[idx as usize];
                                 let rgb = (col).saturated().gamma_corrected(2.2);
                                 *pixel = image::Rgba([
                                     (rgb.x * 255.0).min(255.0).max(0.0) as u8,
@@ -254,11 +254,11 @@ impl<'a, N: ArrayLength<ChannelStorage>> Film<N> {
                             let color_buf = channel_storage_index!(channels, Color, color_idx);
                             let bg_buf = channel_storage_index!(channels, Background, bg_idx);
                             let mut img =
-                                image::RgbImage::new(self.res.w as u32, self.res.h as u32);
+                                image::RgbImage::new(self.res.w, self.res.h);
                             for (x, y, pixel) in img.enumerate_pixels_mut() {
-                                let i = x as usize + (self.res.h - 1 - y as usize) * self.res.w;
-                                let col = color_buf[i];
-                                let bg = bg_buf[i];
+                                let i = x + (self.res.h - 1 - y) * self.res.w;
+                                let col = color_buf[i as usize];
+                                let bg = bg_buf[i as usize];
                                 let rgb = (col + bg).saturated().gamma_corrected(2.2);
                                 *pixel = image::Rgb([
                                     (rgb.x * 255.0).min(255.0).max(0.0) as u8,
@@ -275,10 +275,10 @@ impl<'a, N: ArrayLength<ChannelStorage>> Film<N> {
                         (Some(&color_idx), _, None, false) => {
                             let color_buf = channel_storage_index!(channels, Color, color_idx);
                             let mut img =
-                                image::RgbImage::new(self.res.w as u32, self.res.h as u32);
+                                image::RgbImage::new(self.res.w, self.res.h);
                             for (x, y, pixel) in img.enumerate_pixels_mut() {
-                                let idx = x as usize + (self.res.h - 1 - y as usize) * self.res.w;
-                                let rgb = color_buf[idx].gamma_corrected(2.2);
+                                let idx = x + (self.res.h - 1 - y) * self.res.w;
+                                let rgb = color_buf[idx as usize].gamma_corrected(2.2);
                                 *pixel = image::Rgb([
                                     (rgb.x * 255.0).min(255.0).max(0.0) as u8,
                                     (rgb.y * 255.0).min(255.0).max(0.0) as u8,
@@ -308,10 +308,10 @@ impl<'a, N: ArrayLength<ChannelStorage>> Film<N> {
                             )
                         })?;
                     let buf = channel_storage_index!(channels, Background, idx);
-                    let mut img = image::RgbImage::new(self.res.w as u32, self.res.h as u32);
+                    let mut img = image::RgbImage::new(self.res.w, self.res.h);
                     for (x, y, pixel) in img.enumerate_pixels_mut() {
-                        let idx = x as usize + (self.res.h - 1 - y as usize) * self.res.w;
-                        let rgb = buf[idx].saturated().gamma_corrected(2.2);
+                        let idx = x + (self.res.h - 1 - y) * self.res.w;
+                        let rgb = buf[idx as usize].saturated().gamma_corrected(2.2);
                         *pixel = image::Rgb([
                             (rgb.x * 255.0).min(255.0).max(0.0) as u8,
                             (rgb.y * 255.0).min(255.0).max(0.0) as u8,
@@ -334,10 +334,10 @@ impl<'a, N: ArrayLength<ChannelStorage>> Film<N> {
                             )
                         })?;
                     let buf = channel_storage_index!(channels, WorldNormal, idx);
-                    let mut img = image::RgbImage::new(self.res.w as u32, self.res.h as u32);
+                    let mut img = image::RgbImage::new(self.res.w, self.res.h);
                     for (x, y, pixel) in img.enumerate_pixels_mut() {
-                        let idx = x as usize + (self.res.h - 1 - y as usize) * self.res.w;
-                        let vec = buf[idx];
+                        let idx = x + (self.res.h - 1 - y) * self.res.w;
+                        let vec = buf[idx as usize];
                         let rgb = Srgb::from(vec * 0.5 + Vec3::new(0.5, 0.5, 0.5));
                         *pixel = image::Rgb([
                             (rgb.x * 255.0).min(255.0).max(0.0) as u8,
@@ -359,10 +359,10 @@ impl<'a, N: ArrayLength<ChannelStorage>> Film<N> {
                             String::from("Attempted to write Alpha channel but it didn't exist")
                         })?;
                     let buf = channel_storage_index!(channels, Alpha, idx);
-                    let mut img = image::GrayImage::new(self.res.w as u32, self.res.h as u32);
+                    let mut img = image::GrayImage::new(self.res.w, self.res.h);
                     for (x, y, pixel) in img.enumerate_pixels_mut() {
-                        let idx = x as usize + (self.res.h - 1 - y as usize) * self.res.w;
-                        let a = buf[idx];
+                        let idx = x + (self.res.h - 1 - y) * self.res.w;
+                        let a = buf[idx as usize];
                         *pixel = image::Luma([(a * 255.0).min(255.0).max(0.0) as u8]);
                     }
                     let filename = output_folder
@@ -407,7 +407,7 @@ impl<'a, N: ArrayLength<ChannelStorage> + ArrayLength<ChannelTileStorage>> Film<
                         (start.x + tile_size.w).min(self.res.w),
                         (start.y + tile_size.h).min(self.res.h),
                     );
-                    let tile_bounds = Aabru {
+                    let tile_bounds = Bounds2u {
                         min: start,
                         max: end,
                     };
@@ -553,7 +553,7 @@ impl<'a, N: ArrayLength<ChannelStorage> + ArrayLength<ChannelTileStorage>> Film<
                 for wray in spawned_wrays.drain(..) {
                     world.hitables.add_hits(
                         wray,
-                        f32x4::from(crate::WORLD_RADIUS * 2.0),
+                        f32x4::from(crate::setup::WORLD_RADIUS * 2.0),
                         &mut hit_store,
                         &half_pixel_size_at,
                     );
@@ -693,8 +693,8 @@ impl<'a, N: ArrayLength<ChannelStorage> + ArrayLength<ChannelTileStorage>> Film<
 
 #[inline]
 fn sample_uv(
-    x: usize,
-    y: usize,
+    x: u32,
+    y: u32,
     screen_to_ndc_size: Vec2,
     fis: &FilterImportanceSampler,
     samples: &[f32; 2],

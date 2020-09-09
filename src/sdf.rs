@@ -2,6 +2,7 @@ use crate::hitable::{Hitable, WHit, WShadingPoint};
 use crate::material::MaterialHandle;
 use crate::math::{f32x4, Wec3};
 use crate::ray::WRay;
+use crate::setup::SDF_DETAIL_SCALE;
 
 use sdfu::*;
 
@@ -44,7 +45,7 @@ impl<S: SDF<f32x4, Wec3> + Send + Sync> Hitable for TracedSDF<S> {
             let point = dir.mul_add(Wec3::broadcast(t), start);
             let dist = self.sdf.dist(point).abs();
 
-            hit_mask = dist.cmp_lt(f32x4::from(0.0001 * crate::SDF_DETAIL_SCALE).max(f32x4::from(0.00001 * crate::SDF_DETAIL_SCALE) * t));
+            hit_mask = dist.cmp_lt(f32x4::from(0.0001 * SDF_DETAIL_SCALE).max(f32x4::from(0.00001 * SDF_DETAIL_SCALE) * t));
 
             let hit_gt_nan_mask = hit_mask | gt_nan_mask;
             if hit_gt_nan_mask.move_mask() == 0b1111 {
@@ -66,8 +67,8 @@ impl<S: SDF<f32x4, Wec3> + Send + Sync> Hitable for TracedSDF<S> {
             let dist = self.sdf.dist(point).abs();
 
             let hit_mask = dist.cmp_lt(
-                f32x4::from(0.00005 * crate::SDF_DETAIL_SCALE)
-                    .max(f32x4::from(0.05 * crate::SDF_DETAIL_SCALE) * hit_threshold_at(t)));
+                f32x4::from(0.00005 * SDF_DETAIL_SCALE)
+                    .max(f32x4::from(0.05 * SDF_DETAIL_SCALE) * hit_threshold_at(t)));
 
             let gt_mask = t.cmp_gt(t_max);
             let hit_gt_nan_mask = hit_mask | nan_mask | gt_mask;
@@ -88,7 +89,7 @@ impl<S: SDF<f32x4, Wec3> + Send + Sync> Hitable for TracedSDF<S> {
     ) -> (MaterialHandle, WShadingPoint) {
         let point = hit.point();
 
-        let half_pixel_size = f32x4::from(0.0001).max(f32x4::from(crate::SDF_DETAIL_SCALE) * half_pixel_size_at(hit.t));
+        let half_pixel_size = f32x4::from(0.0001).max(f32x4::from(SDF_DETAIL_SCALE) * half_pixel_size_at(hit.t));
 
         let normals = self.sdf.normals_fast(half_pixel_size);
 

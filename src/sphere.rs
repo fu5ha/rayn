@@ -28,25 +28,21 @@ impl<TR: WSequenced<Wec3>> Hitable for Sphere<TR> {
 
         let origin = WSequenced::sample_at(&self.transform_seq, time);
         let oc = start - origin;
-        let b = f32x4::from(2.0) * oc.dot(dir);
+        let b = oc.dot(dir);
         let c = oc.mag_sq() - f32x4::from(self.radius * self.radius);
-        let descrim = b * b - f32x4::from(4.0) * c;
+        let descrim = b * b - c;
 
         let desc_pos = descrim.cmp_gt(f32x4::ZERO);
 
-        if desc_pos.move_mask() != 0b0000 {
-            let desc_sqrt = descrim.sqrt();
+        let desc_sqrt = descrim.sqrt();
 
-            let t1 = (-b - desc_sqrt) / f32x4::from(2.0);
-            let t1_valid = t1.cmp_gt(f32x4::from(0.001)) & t1.cmp_le(dist);
+        let t1 = -b - desc_sqrt;
+        let t2 = -b + desc_sqrt;
 
-            let t2 = (-b + desc_sqrt) / f32x4::from(2.0);
-            let t2_valid = t2.cmp_gt(f32x4::from(0.001)) & t2.cmp_le(dist);
+        let min = t1.min(t2);
+        let valid = min.cmp_gt(f32x4::from(0.001)) & t1.cmp_le(dist) & desc_pos;
 
-            f32x4::merge((t1_valid | t2_valid) & desc_pos, f32x4::ZERO, f32x4::ONE)
-        } else {
-            f32x4::ONE
-        }
+        f32x4::merge(valid, f32x4::ZERO, f32x4::ONE)
     }
 
     fn hit(&self, ray: &WRay, t_max: f32x4, _hit_threshold_at: &dyn Fn(f32x4) -> f32x4) -> f32x4 {
@@ -60,23 +56,19 @@ impl<TR: WSequenced<Wec3>> Hitable for Sphere<TR> {
 
         let miss = f32x4::from(std::f32::MAX);
 
-        if desc_pos.move_mask() != 0b0000 {
-            let desc_sqrt = descrim.sqrt();
+        let desc_sqrt = descrim.sqrt();
 
-            let t1 = -b - desc_sqrt;
-            let t1_valid = t1.cmp_gt(f32x4::from(0.0001)) & t1.cmp_le(t_max) & desc_pos;
+        let t1 = -b - desc_sqrt;
+        let t1_valid = t1.cmp_gt(f32x4::from(0.0001)) & t1.cmp_le(t_max) & desc_pos;
 
-            let t2 = -b + desc_sqrt;
-            let t2_valid = t2.cmp_gt(f32x4::from(0.0001)) & t2.cmp_le(t_max) & desc_pos;
+        let t2 = -b + desc_sqrt;
+        let t2_valid = t2.cmp_gt(f32x4::from(0.0001)) & t2.cmp_le(t_max) & desc_pos;
 
-            let take_t1 = t1.cmp_lt(t2) & t1_valid;
+        let take_t1 = t1.cmp_lt(t2) & t1_valid;
 
-            let t = f32x4::merge(take_t1, t1, t2);
+        let t = f32x4::merge(take_t1, t1, t2);
 
-            f32x4::merge(t1_valid | t2_valid, t, miss)
-        } else {
-            miss
-        }
+        f32x4::merge(t1_valid | t2_valid, t, miss)
     }
 
     fn get_shading_info(
