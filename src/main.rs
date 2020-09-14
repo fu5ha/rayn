@@ -66,7 +66,7 @@ fn main() {
             camera,
             &integrator,
             &filter,
-            Extent2u::new(16, 16),
+            Extent2u::new(8, 8),
             frame,
             frame_start..frame_end,
             crate::setup::SAMPLES,

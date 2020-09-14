@@ -40,7 +40,9 @@ impl CameraStore {
 
 #[derive(Clone, Copy)]
 pub struct PinholeCamera<O, A, U> {
-    half_size: Wec2,
+    fl: f32x4,
+    // * Vec2(2.0 * aspect, 2.0)
+    aspect: f32x4,
     // tan(hfov/2) / resolution.h
     half_pixel_size: f32x4,
     origin: O,
@@ -57,13 +59,15 @@ impl<O, A, U> PinholeCamera<O, A, U> {
         at: A,
         up: U,
     ) -> Self {
-        let theta = vfov * std::f32::consts::PI / 180.0;
-        let half_height = (theta / 2.0).tan();
-        let aspect = resolution.x / resolution.y;
-        let half_width = aspect * half_height;
+        let two_theta = vfov * std::f32::consts::PI / 180.0;
+        let theta = 0.5 * two_theta;
+        let fl = 1.0 / theta;
+        let half_height = theta.tan();
+        let aspect = f32x4::from(resolution.x / resolution.y);
         let half_pixel_size = f32x4::from(half_height / resolution.y);
         PinholeCamera {
-            half_size: Wec2::splat(Vec2::new(half_width, half_height)),
+            fl: f32x4::from(fl),
+            aspect,
             half_pixel_size,
             origin,
             at,
@@ -83,7 +87,7 @@ where
         scramble: f32,
         sample_nums: [usize; 4],
         tile_coord: Vec2u,
-        uv: Wec2,
+        mut uv: Wec2,
         time: f32x4,
         _samples: &[f32x4; 2],
     ) -> WRay {
@@ -91,20 +95,21 @@ where
         let at = self.at.sample_at(time);
         let up = self.up.sample_at(time);
 
-        let basis_w = (origin - at).normalized();
-        let basis_u = up.cross(basis_w).normalized();
-        let basis_v = basis_w.cross(basis_u);
-        let lower_left = origin
-            - basis_u * self.half_size.x
-            - basis_v * self.half_size.y
-            - basis_w;
+        let forward = (at - origin).normalized();
+        let right = forward.cross(up).normalized();
+        let up = right.cross(forward);
 
-        let horiz = basis_u * self.half_size.x * f32x4::from(2.0) * uv.x;
-        let verti = basis_v * self.half_size.y * f32x4::from(2.0) * uv.y;
+        uv += uv;
+        uv -= Wec2::broadcast(f32x4::from(1.0));
+        uv.x *= self.aspect;
+        let r = uv.mag();
+        let theta = r / self.fl;
+
+        uv *= theta.tan() / theta;
 
         WRay::new(
             origin,
-            (lower_left + horiz + verti - origin).normalized(),
+            (right * uv.x + up * uv.y + forward).normalized(),
             time,
             [tile_coord, tile_coord, tile_coord, tile_coord],
             [true, true, true, true],

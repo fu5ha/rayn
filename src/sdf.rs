@@ -132,7 +132,7 @@ impl SDF<f32x4, Wec3> for MandelBox {
             self.sphere_fold.sphere_fold(&mut p, &mut dr);
 
             p = p.mul_add(self.scale_vec, offset);
-            dr = (-dr).mul_add(self.scale, one);
+            dr = dr.mul_add(self.scale.abs(), one);
         }
 
         let d = p.mag() / dr.abs();
@@ -144,7 +144,6 @@ impl SDF<f32x4, Wec3> for MandelBox {
 pub struct BoxFold {
     l: Wec3,
     neg_l: Wec3,
-    two: Wec3,
 }
 
 impl BoxFold {
@@ -153,12 +152,11 @@ impl BoxFold {
         BoxFold {
             l,
             neg_l: -l,
-            two: Wec3::broadcast(2.0.into()),
         }
     }
 
     pub fn box_fold(&self, point: &mut Wec3) {
-        *point = point.clamped(self.neg_l, self.l).mul_add(self.two, -*point)
+        *point = point.clamped(self.neg_l, self.l) * f32x4::from(2.0) -*point
     }
 }
 
@@ -169,12 +167,10 @@ pub struct SphereFold {
 }
 
 impl SphereFold {
-    pub fn new(min_radius: f32, fixed_radius: f32) -> Self {
-        let min_rad_sq = (min_radius * min_radius).into();
-        let fixed_rad_sq = (fixed_radius * fixed_radius).into();
+    pub fn new(min_rad_sq: f32, fixed_rad_sq: f32) -> Self {
         Self {
-            min_rad_sq,
-            fixed_rad_sq,
+            min_rad_sq: min_rad_sq.into(),
+            fixed_rad_sq: fixed_rad_sq.into(),
         }
     }
 
