@@ -12,6 +12,7 @@ mod math;
 mod ray;
 mod sampler;
 mod sdf;
+mod sky;
 mod spectrum;
 mod sphere;
 mod volume;
@@ -50,10 +51,12 @@ fn main() {
 
     let filter = BlackmanHarrisFilter::new(1.5);
     // let filter = BoxFilter::default();
-    let integrator = PathTracingIntegrator {
-        max_bounces: crate::setup::MAX_INDIRECT_BOUNCES,
-        volume_marches: crate::setup::VOLUME_MARCHES_PER_SAMPLE,
-    };
+    let integrator = PathTracingIntegrator::new(
+         crate::setup::MAX_INDIRECT_BOUNCES,
+         crate::setup::VOLUME_MARCHES_PER_SAMPLE,
+        crate::setup::LIGHT_SAMPLES_PER_VOLUME_MARCH,
+        crate::setup::LIGHT_SAMPLES_PER_PATH_VERTEX,
+    ).expect("Too many light samples.");
 
     for frame in frame_range {
         let start = Instant::now();

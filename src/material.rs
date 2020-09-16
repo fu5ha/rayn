@@ -9,7 +9,7 @@ use crate::spectrum::{Srgb, WSrgb};
 use std::f32::consts::PI;
 
 pub trait BSDF {
-    fn receives_light(&self) -> bool {
+    fn scatters(&self) -> bool {
         true
     }
 
@@ -55,7 +55,7 @@ impl Default for WScatteringEvent {
 #[derive(Clone, Copy, Debug)]
 pub struct MaterialHandle(pub usize);
 
-pub struct MaterialStore(Vec<Box<dyn Material>>);
+pub struct MaterialStore(pub Vec<Box<dyn Material>>);
 
 impl MaterialStore {
     pub fn new() -> Self {
@@ -391,63 +391,6 @@ impl BSDF for DielectricBSDF {
 //     (f, pdf, bounce)
 // }
 
-#[derive(Clone, Copy)]
-pub struct Sky {
-    top: Srgb,
-    bottom: Srgb,
-}
-
-impl Sky {
-    pub fn new(top: Srgb, bottom: Srgb) -> Self {
-        Self { top, bottom }
-    }
-}
-
-impl Material for Sky {
-    fn get_bsdf_at<'bump>(
-        &self,
-        _intersection: &WShadingPoint,
-        bump: &'bump Bump,
-    ) -> &'bump mut dyn BSDF {
-        bump.alloc_with(|| SkyBSDF {
-            top: WSrgb::splat(self.top),
-            bottom: WSrgb::splat(self.bottom),
-        })
-    }
-}
-
-#[derive(Clone, Copy)]
-pub struct SkyBSDF {
-    top: WSrgb,
-    bottom: WSrgb,
-}
-
-impl BSDF for SkyBSDF {
-    fn receives_light(&self) -> bool {
-        false
-    }
-
-    fn f(&self, _: Wec3, _: Wec3, _: Wec3) -> WSrgb {
-        panic!()
-    }
-
-    fn scatter(
-        &self,
-        _wo: Wec3,
-        _intersection: &WShadingPoint,
-        _samples_1d: f32x4,
-        _samples_2d: &[f32x4; 4],
-    ) -> WScatteringEvent {
-        WScatteringEvent::default()
-    }
-
-    fn le(&self, wo: Wec3, _intersection: &WShadingPoint) -> WSrgb {
-        let t = f32x4::from(0.5) * (wo.y + f32x4::ONE);
-
-        self.top * (f32x4::ONE - t) + self.bottom * t
-    }
-}
-
 pub struct Emissive<EG> {
     pub emission_gen: EG,
 }
@@ -496,7 +439,7 @@ impl<I> BSDF for EmissiveBSDF<I>
 where
     I: BSDF,
 {
-    fn receives_light(&self) -> bool {
+    fn scatters(&self) -> bool {
         false
     }
 

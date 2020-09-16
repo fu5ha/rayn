@@ -170,12 +170,14 @@ impl HitableStore {
     pub fn add_hits(
         &self,
         ray: WRay,
-        t_max: f32x4,
+        t_max: f32,
         hit_store: &mut HitStore,
+        escaped_rays: &mut BumpVec<'_, Ray>,
         half_pixel_size_at: &dyn Fn(f32x4) -> f32x4,
     ) {
+        let t_max_wide = f32x4::from(t_max);
         let (ids, dists) = self.iter().enumerate().fold(
-            ([std::usize::MAX; 4], t_max),
+            ([std::usize::MAX; 4], t_max_wide),
             |acc, (hitable_id, hitable)| {
                 let (mut closest_ids, mut closest) = acc;
 
@@ -201,9 +203,13 @@ impl HitableStore {
         let dists = dists.as_ref();
 
         for ((id, ray), t) in ids.iter().zip(rays.iter()).zip(dists.iter()) {
-            if *id < std::usize::MAX && ray.valid {
-                unsafe {
-                    hit_store.add_hit(*id, Hit { ray: *ray, t: *t });
+            if ray.valid {
+                if *id < std::usize::MAX {
+                    unsafe {
+                        hit_store.add_hit(*id, Hit { ray: *ray, t: *t });
+                    }
+                } else {
+                    escaped_rays.push(*ray);
                 }
             }
         }

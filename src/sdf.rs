@@ -45,7 +45,7 @@ impl<S: SDF<f32x4, Wec3> + Send + Sync> Hitable for TracedSDF<S> {
             let point = dir.mul_add(Wec3::broadcast(t), start);
             let dist = self.sdf.dist(point).abs();
 
-            hit_mask = dist.cmp_lt(f32x4::from(0.0001 * SDF_DETAIL_SCALE).max(f32x4::from(0.00001 * SDF_DETAIL_SCALE) * t));
+            hit_mask = dist.cmp_lt(f32x4::from(0.0001 * SDF_DETAIL_SCALE).max(f32x4::from(0.0001 * SDF_DETAIL_SCALE) * t));
 
             let hit_gt_nan_mask = hit_mask | gt_nan_mask;
             if hit_gt_nan_mask.move_mask() == 0b1111 {

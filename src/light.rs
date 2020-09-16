@@ -96,9 +96,9 @@ impl Light for SphereLight {
         // take sample
         let t = d * theta_a.lerp(theta_b, sample).tan();
         let sample_dist = delta + t;
-        let pdf = d / ((theta_b - theta_a) * (d.mul_add(d, t * t)));
+        let vol_pdf = d / ((theta_b - theta_a) * (d.mul_add(d, t * t)));
 
-        (sample_dist, pdf)
+        (sample_dist, vol_pdf)
     }
 }
 

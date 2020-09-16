@@ -5,11 +5,12 @@ use crate::{
     material::MaterialStore,
     hitable::HitableStore,
     volume::VolumeParams,
-    material::{Dielectric, Emissive, Sky},
+    material::{Dielectric, Emissive},
+    sdf::{MandelBox, BoxFold, SphereFold, TracedSDF},
+    sky::Sky,
     sphere::Sphere,
     math::{Extent2u, Vec2, Vec3},
     spectrum::Srgb,
-    sdf::{MandelBox, BoxFold, SphereFold, TracedSDF},
 };
 
 // The resolution of the output image
@@ -19,10 +20,16 @@ pub const RESOLUTION: Extent2u = Extent2u::new(900, 1200);
 // for SAMPLES here, there will actually be 8 samples per pixel.
 //
 // Increase this for higher overall quality/less noise.
-pub const SAMPLES: usize = 2;
+pub const SAMPLES: usize = 16;
+
+// The number of lights to sample at each path vertex (i.e. each intersection point). Must be between 0 and 4.
+pub const LIGHT_SAMPLES_PER_PATH_VERTEX: usize = 4;
 
 // The number of marches (i.e. points along the ray) to sample for each ray for volume scattering.
-pub const VOLUME_MARCHES_PER_SAMPLE: usize = 2;
+pub const VOLUME_MARCHES_PER_SAMPLE: usize = 3;
+
+// The number of lights to sample at each sampled scatter point. Must be between 0 and 4.
+pub const LIGHT_SAMPLES_PER_VOLUME_MARCH: usize = 1;
 
 // The number of times light will bounce around the scene to provide global illumination before
 // being killed. Higher numbers of bounces are more expensive but will create a more "full" sense
@@ -41,7 +48,7 @@ pub const SDF_DETAIL_SCALE: f32 = 0.75;
 // surface of the fractal will be more sparsely defined, so you should use a higher SDF_DETAIL_SCALE
 // in order to see it better, whereas with more iterations the surface will be more defined so you can
 // use a lower (more detailed) SDF_DETAIL_SCALE.
-pub const FRACTAL_ITERATIONS: usize = 14;
+pub const FRACTAL_ITERATIONS: usize = 22;
 
 pub fn setup() -> (CameraHandle, World) {
     let mut materials = MaterialStore::new();
@@ -54,26 +61,24 @@ pub fn setup() -> (CameraHandle, World) {
     // Setting both to None will make the render significantly faster.
     let volume_params = VolumeParams {
         // coeff_scattering: None,
-        coeff_extinction: None,
-        coeff_scattering: Some(0.05),
-        // coeff_extinction: Some(0.035),
+        // coeff_extinction: None,
+        coeff_scattering: Some(0.15),
+        coeff_extinction: Some(0.015),
     };
 
     // SKY
-    let sky = materials.add_material(Sky::new(
+    let sky = Sky::new(
         // You can change the following numbers to change the color of the sky. The first Srgb color is the
         // color of the top of the skydome while the second number is the color of the bottom... they will be
         // smoothly blended together towards the middle.
-        Srgb::new(0.3, 0.4, 0.6),
+        Srgb::new(0.3, 0.4, 0.6) * 1.5,
         Srgb::new(0.2, 0.3, 0.6) * 0.05,
-    ));
-
-    hitables.push(Sphere::new(Vec3::new(0.0, 0.0, 0.0), WORLD_RADIUS, sky));
+    );
 
     // FRACTAL
     // Here you can change the material properties for the fractal. Try changing the Srgb color and the roughness, 
     // which should stay between 0.0 (completely smooth) and 1.0 (completely rough).
-    let grey = materials.add_material(Dielectric::new_remap(Srgb::new(0.6, 0.2, 0.1), 0.75));
+    let grey = materials.add_material(Dielectric::new_remap(Srgb::new(0.8, 0.3, 0.2), 0.75));
 
     hitables.push(TracedSDF::new(
         // Try playing around with these numbers, which will dramatically affect how the fractal in the middle looks! The commented line
@@ -98,26 +103,26 @@ pub fn setup() -> (CameraHandle, World) {
     // OTHER LIGHTS
     // Try playing with the colors below to change the colors of the lights.
     // let green = Srgb::new(1.5, 4.5, 3.0).normalized();
-    let green = Srgb::new(1.0, 1.0, 1.0).normalized();
+    // let green = Srgb::new(1.0, 1.0, 1.0).normalized();
     // let blue = Srgb::new(1.5, 3.0, 4.5).normalized();
     // let blue_emissive = materials.add_material(Emissive::new_splat(blue * 3.0));
-    let green_emissive = materials.add_material(Emissive::new_splat(green * 3.0));
+    // let green_emissive = materials.add_material(Emissive::new_splat(green * 3.0));
 
     // This defines a position and size for pairs of lights, which gets used in the for loop below.
     // Try playing with the positions and sizes :)
-    let light_pairs = [
-        (Vec3::new(1.0, -0.75, 1.0), 0.15),
-        //(Vec3::new(-1.2, 1.2, 1.2), 0.15),
-    ];
+    // let light_pairs = [
+    //     (Vec3::new(1.0, -0.75, 1.0), 0.15),
+    //     //(Vec3::new(-1.2, 1.2, 1.2), 0.15),
+    // ];
 
-    for &(pos, rad) in light_pairs.iter() {
-        let mut green_pos = pos;
-        green_pos.y *= -1.0;
-        lights.push(Box::new(SphereLight::new(green_pos, rad, green * 10.0)));
-        //lights.push(Box::new(SphereLight::new(pos, rad, blue * 40.0)));
-        hitables.push(Sphere::new(green_pos, rad - 0.01, green_emissive));
-        //hitables.push(Sphere::new(pos, rad - 0.01, blue_emissive));
-    }
+    // for &(pos, rad) in light_pairs.iter() {
+    //     let mut green_pos = pos;
+    //     green_pos.y *= -1.0;
+    //     lights.push(Box::new(SphereLight::new(green_pos, rad, green * 10.0)));
+    //     //lights.push(Box::new(SphereLight::new(pos, rad, blue * 40.0)));
+    //     hitables.push(Sphere::new(green_pos, rad - 0.01, green_emissive));
+    //     //hitables.push(Sphere::new(pos, rad - 0.01, blue_emissive));
+    // }
 
     //lights.push(Box::new(SphereLight::new(Vec3::zero(), 0.25, green * 20.0)));
     //hitables.push(Sphere::new(Vec3::zero(), 0.24, green_emissive));
@@ -166,6 +171,7 @@ pub fn setup() -> (CameraHandle, World) {
             lights,
             cameras,
             volume_params,
+            sky,
         },
     )
 }

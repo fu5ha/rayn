@@ -449,6 +449,9 @@ impl<'a, N: ArrayLength<ChannelStorage> + ArrayLength<ChannelTileStorage>> Film<
             let mut new_samples = BumpVec::new_in(&sample_bump);
             let hit_bump = Bump::new();
             let mut hit_store = HitStore::from_hitable_store(&hit_bump, &world.hitables);
+            let escape_bump = Bump::new();
+            let mut escaped_rays = BumpVec::new_in(&escape_bump);
+            let mut escaped_wrays = BumpVec::new_in(&escape_bump);
             let mut bsdf_bump = Bump::new();
 
             let time_range_range = f32x4::from(time_range.end - time_range.start);
@@ -542,7 +545,6 @@ impl<'a, N: ArrayLength<ChannelStorage> + ArrayLength<ChannelTileStorage>> Film<
                         #[inline]
                         |t: f32x4| camera.half_pixel_size_at(t),
                     )
-                // Box::new(|_t| f32x4::from(0.0001))
                 } else {
                     Box::new(
                         #[inline]
@@ -553,8 +555,9 @@ impl<'a, N: ArrayLength<ChannelStorage> + ArrayLength<ChannelTileStorage>> Film<
                 for wray in spawned_wrays.drain(..) {
                     world.hitables.add_hits(
                         wray,
-                        f32x4::from(crate::setup::WORLD_RADIUS * 2.0),
+                        crate::setup::WORLD_RADIUS * 2.0,
                         &mut hit_store,
+                        &mut escaped_rays,
                         &half_pixel_size_at,
                     );
                 }
@@ -562,7 +565,7 @@ impl<'a, N: ArrayLength<ChannelStorage> + ArrayLength<ChannelTileStorage>> Film<
                 hit_store.process_hits(&world.hitables, &mut wintersections, &half_pixel_size_at);
 
                 for (mat_id, wshading_point) in wintersections.drain(..) {
-                    let mut samples_1d = [f32x4::ZERO; 3 + VOLUME_MARCHES_PER_SAMPLE];
+                    let mut samples_1d = [f32x4::ZERO; 3 + 5 * VOLUME_MARCHES_PER_SAMPLE];
                     let num_1d_samples = samples_1d.len();
 
                     for (set, sample) in samples_1d.iter_mut().enumerate() {
@@ -573,7 +576,7 @@ impl<'a, N: ArrayLength<ChannelStorage> + ArrayLength<ChannelTileStorage>> Film<
                         );
                     }
 
-                    let mut samples_2d = [f32x4::ZERO; 12 + 8 * VOLUME_MARCHES_PER_SAMPLE];
+                    let mut samples_2d = [f32x4::ZERO; 12 + 10 * VOLUME_MARCHES_PER_SAMPLE];
                     let num_2d_samples = samples_2d.len();
 
                     for (i, sample) in samples_2d.iter_mut().enumerate() {
@@ -588,7 +591,7 @@ impl<'a, N: ArrayLength<ChannelStorage> + ArrayLength<ChannelTileStorage>> Film<
                         );
                     }
 
-                    integrator.integrate(
+                    integrator.integrate_intersection(
                         world,
                         &samples_1d,
                         &samples_2d,
@@ -598,6 +601,58 @@ impl<'a, N: ArrayLength<ChannelStorage> + ArrayLength<ChannelTileStorage>> Film<
                         &bsdf_bump,
                         &mut spawned_rays,
                         &mut new_samples,
+                    );
+                }
+
+                while escaped_rays.len() % 4 != 0 {
+                    escaped_rays.push(Ray::new_invalid());
+                }
+
+                for rays in escaped_rays.chunks_exact(4) {
+                    escaped_wrays.push(WRay::from(unsafe {[
+                        *rays.get_unchecked(0),
+                        *rays.get_unchecked(1),
+                        *rays.get_unchecked(2),
+                        *rays.get_unchecked(3),
+                    ]}))
+                }
+
+                escaped_rays.clear();
+
+                for ray in escaped_wrays.drain(..) {
+                    let mut samples_1d = [f32x4::ZERO; 5 * VOLUME_MARCHES_PER_SAMPLE];
+                    let num_1d_samples = samples_1d.len();
+
+                    for (set, sample) in samples_1d.iter_mut().enumerate() {
+                        *sample = sample_sets.wide_sample_1d_array(
+                            ray.sample,
+                            ray.scramble,
+                            1 + set + depth * num_1d_samples,
+                        );
+                    }
+
+                    let mut samples_2d = [f32x4::ZERO; 8 * VOLUME_MARCHES_PER_SAMPLE];
+                    let num_2d_samples = samples_2d.len();
+
+                    for (i, sample) in samples_2d.iter_mut().enumerate() {
+                        let dim = i % 2;
+                        let set = i / 2;
+
+                        *sample = sample_sets.wide_sample_2d_array(
+                            dim,
+                            ray.sample,
+                            ray.scramble,
+                            2 + set + depth * num_2d_samples / 2,
+                        );
+                    }
+
+                    integrator.integrate_escaped_ray(
+                        world,
+                        &samples_1d,
+                        &samples_2d,
+                        depth,
+                        ray,
+                        &mut new_samples
                     );
                 }
 
