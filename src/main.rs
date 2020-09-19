@@ -12,12 +12,12 @@ mod math;
 mod ray;
 mod sampler;
 mod sdf;
+mod setup;
 mod sky;
 mod spectrum;
 mod sphere;
 mod volume;
 mod world;
-mod setup;
 
 use film::{ChannelKind, Film};
 use filter::BlackmanHarrisFilter;
@@ -41,7 +41,7 @@ fn main() {
             ChannelKind::Background,
             ChannelKind::WorldNormal,
         ],
-        crate::setup::RESOLUTION
+        crate::setup::RESOLUTION,
     )
     .unwrap();
 
@@ -52,11 +52,12 @@ fn main() {
     let filter = BlackmanHarrisFilter::new(1.5);
     // let filter = BoxFilter::default();
     let integrator = PathTracingIntegrator::new(
-         crate::setup::MAX_INDIRECT_BOUNCES,
-         crate::setup::VOLUME_MARCHES_PER_SAMPLE,
+        crate::setup::MAX_INDIRECT_BOUNCES,
+        crate::setup::VOLUME_MARCHES_PER_SAMPLE,
         crate::setup::LIGHT_SAMPLES_PER_VOLUME_MARCH,
         crate::setup::LIGHT_SAMPLES_PER_PATH_VERTEX,
-    ).expect("Too many light samples.");
+    )
+    .expect("Too many light samples.");
 
     for frame in frame_range {
         let start = Instant::now();
@@ -86,15 +87,14 @@ fn main() {
 
         println!("Post processing image...");
 
-        film.save_to(
+        film.save_to_exr(
             &[
                 ChannelKind::Alpha,
-                ChannelKind::WorldNormal,
+                ChannelKind::Background,
                 ChannelKind::Color,
             ],
             "renders",
             format!("{}_spp", crate::setup::SAMPLES * 4),
-            false,
         )
         .unwrap();
     }

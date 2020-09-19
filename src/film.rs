@@ -11,9 +11,9 @@ use crate::integrator::Integrator;
 use crate::math::{f32x4, Bounds2u, Extent2u, Vec2, Vec2u, Vec3, Wec2};
 use crate::ray::{Ray, WRay};
 use crate::sampler::Samples;
+use crate::setup::VOLUME_MARCHES_PER_SAMPLE;
 use crate::spectrum::Srgb;
 use crate::world::World;
-use crate::setup::VOLUME_MARCHES_PER_SAMPLE;
 
 use std::collections::hash_map::HashMap;
 use std::ops::Range;
@@ -21,6 +21,11 @@ use std::sync::{
     atomic::{AtomicUsize, Ordering},
     Arc, Mutex,
 };
+
+pub enum OutputFormat {
+    PNG,
+    EXR,
+}
 
 macro_rules! declare_channels {
     {
@@ -129,6 +134,44 @@ macro_rules! channel_storage_index {
     };
 }
 
+macro_rules! create_exr_layer_3channel {
+    (
+        $buf: ident,
+        $data_size: expr,
+        $layer_name: expr,
+        $channel_names: expr,
+        $color_data: expr
+    ) => {{
+        use exr::prelude::simple_image::*;
+
+        let total_pixels = $data_size.area();
+
+        let gen_vec = || Vec::with_capacity(total_pixels);
+        let channels = (0..total_pixels)
+            .into_iter()
+            .map(|idx| {
+                let col = $buf[idx];
+                (col.x, col.y, col.z)
+            })
+            .fold(vec![gen_vec(), gen_vec(), gen_vec()], |mut vecs, items| {
+                vecs[0].push(items.0);
+                vecs[1].push(items.1);
+                vecs[2].push(items.2);
+                vecs
+            })
+            .into_iter()
+            .zip($channel_names.iter())
+            .map(|(vec, channel_name)| {
+                Channel::color_data((*channel_name).try_into().unwrap(), Samples::F32(vec))
+            })
+            .collect::<Channels>();
+
+        Layer::new($layer_name.try_into().unwrap(), $data_size, channels)
+            .with_compression(Compression::RLE)
+            .with_block_format(None, attribute::LineOrder::Decreasing)
+    }};
+}
+
 pub struct Tile<N: ArrayLength<ChannelTileStorage>> {
     _index: usize,
     epoch: usize,
@@ -202,7 +245,7 @@ impl<'a, N: ArrayLength<ChannelStorage>> Film<N> {
         })
     }
 
-    pub fn save_to<P: AsRef<std::path::Path>, IS: Into<String>>(
+    pub fn save_to_png<P: AsRef<std::path::Path>, IS: Into<String>>(
         &self,
         write_channels: &[ChannelKind],
         output_folder: P,
@@ -230,8 +273,7 @@ impl<'a, N: ArrayLength<ChannelStorage>> Film<N> {
                         (Some(&color_idx), Some(&alpha_idx), _, true) => {
                             let color_buf = &channel_storage_index!(channels, Color, color_idx);
                             let alpha_buf = &channel_storage_index!(channels, Alpha, alpha_idx);
-                            let mut img =
-                                image::RgbaImage::new(self.res.w, self.res.h);
+                            let mut img = image::RgbaImage::new(self.res.w, self.res.h);
                             for (x, y, pixel) in img.enumerate_pixels_mut() {
                                 let idx = x + (self.res.h - 1 - y) * self.res.w;
                                 let col = color_buf[idx as usize];
@@ -253,8 +295,7 @@ impl<'a, N: ArrayLength<ChannelStorage>> Film<N> {
                         (Some(&color_idx), _, Some(&bg_idx), false) => {
                             let color_buf = channel_storage_index!(channels, Color, color_idx);
                             let bg_buf = channel_storage_index!(channels, Background, bg_idx);
-                            let mut img =
-                                image::RgbImage::new(self.res.w, self.res.h);
+                            let mut img = image::RgbImage::new(self.res.w, self.res.h);
                             for (x, y, pixel) in img.enumerate_pixels_mut() {
                                 let i = x + (self.res.h - 1 - y) * self.res.w;
                                 let col = color_buf[i as usize];
@@ -274,8 +315,7 @@ impl<'a, N: ArrayLength<ChannelStorage>> Film<N> {
                         }
                         (Some(&color_idx), _, None, false) => {
                             let color_buf = channel_storage_index!(channels, Color, color_idx);
-                            let mut img =
-                                image::RgbImage::new(self.res.w, self.res.h);
+                            let mut img = image::RgbImage::new(self.res.w, self.res.h);
                             for (x, y, pixel) in img.enumerate_pixels_mut() {
                                 let idx = x + (self.res.h - 1 - y) * self.res.w;
                                 let rgb = color_buf[idx as usize].gamma_corrected(2.2);
@@ -373,6 +413,127 @@ impl<'a, N: ArrayLength<ChannelStorage>> Film<N> {
                 }
             }
         }
+        Ok(())
+    }
+
+    pub fn save_to_exr<P: AsRef<std::path::Path>, IS: Into<String>>(
+        &self,
+        write_channels: &[ChannelKind],
+        output_folder: P,
+        base_name: IS,
+    ) -> Result<(), String> {
+        use exr::prelude::simple_image::*;
+        use std::fs::DirBuilder;
+        DirBuilder::new()
+            .recursive(true)
+            .create(output_folder.as_ref())
+            .unwrap();
+
+        let base_name = base_name.into();
+
+        let channels = self.channels.lock().unwrap();
+
+        let mut exr_layers = Layers::new();
+
+        let data_size: Vec2<usize> = (self.res.w as usize, self.res.h as usize).into();
+
+        for kind in write_channels.iter() {
+            match *kind {
+                ChannelKind::Color => {
+                    let color_idx =
+                        *self
+                            .channel_indices
+                            .get(&ChannelKind::Color)
+                            .ok_or_else(|| {
+                                String::from("Attempted to write Color channel but it didn't exist")
+                            })?;
+                    let color_buf = channel_storage_index!(channels, Color, color_idx);
+
+                    exr_layers.push(create_exr_layer_3channel!(
+                        color_buf,
+                        data_size,
+                        "Color",
+                        ["R", "G", "B"],
+                        true
+                    ));
+                }
+                ChannelKind::Background => {
+                    let idx = *self
+                        .channel_indices
+                        .get(&ChannelKind::Background)
+                        .ok_or_else(|| {
+                            String::from(
+                                "Attempted to write Background channel but it didn't exist",
+                            )
+                        })?;
+                    let buf = channel_storage_index!(channels, Background, idx);
+                    exr_layers.push(create_exr_layer_3channel!(
+                        buf,
+                        data_size,
+                        "Background",
+                        ["R", "G", "B"],
+                        true
+                    ));
+                }
+                ChannelKind::WorldNormal => {
+                    let idx = *self
+                        .channel_indices
+                        .get(&ChannelKind::WorldNormal)
+                        .ok_or_else(|| {
+                            String::from(
+                                "Attempted to write WorldNormal channel but it didn't exist",
+                            )
+                        })?;
+                    let buf = channel_storage_index!(channels, WorldNormal, idx);
+                    exr_layers.push(create_exr_layer_3channel!(
+                        buf,
+                        data_size,
+                        "World Normal",
+                        ["X", "Y", "Z"],
+                        false
+                    ));
+                }
+                ChannelKind::Alpha => {
+                    let idx = *self
+                        .channel_indices
+                        .get(&ChannelKind::Alpha)
+                        .ok_or_else(|| {
+                            String::from("Attempted to write Alpha channel but it didn't exist")
+                        })?;
+                    let buf = channel_storage_index!(channels, Alpha, idx);
+                    let total_pixels = data_size.area();
+
+                    let vec = (0..total_pixels)
+                        .into_iter()
+                        .map(|idx| buf[idx])
+                        .collect::<Vec<_>>();
+
+                    let channels = std::iter::once(Channel::color_data(
+                        "A".try_into().unwrap(),
+                        Samples::F32(vec),
+                    ))
+                    .collect::<Channels>();
+
+                    exr_layers.push(
+                        Layer::new("Alpha".try_into().unwrap(), data_size, channels)
+                            .with_compression(Compression::RLE)
+                            .with_block_format(None, attribute::LineOrder::Decreasing),
+                    );
+                }
+            }
+        }
+
+        let image = Image::new_from_layers(exr_layers, IntegerBounds::from_dimensions(data_size));
+
+        let filename = output_folder
+            .as_ref()
+            .join(format!("{}.exr", base_name.clone()));
+        println!("Saving to {}...", filename.display());
+
+        image
+            .write_to_file(filename, write_options::high())
+            .unwrap();
+
         Ok(())
     }
 }
@@ -609,12 +770,14 @@ impl<'a, N: ArrayLength<ChannelStorage> + ArrayLength<ChannelTileStorage>> Film<
                 }
 
                 for rays in escaped_rays.chunks_exact(4) {
-                    escaped_wrays.push(WRay::from(unsafe {[
-                        *rays.get_unchecked(0),
-                        *rays.get_unchecked(1),
-                        *rays.get_unchecked(2),
-                        *rays.get_unchecked(3),
-                    ]}))
+                    escaped_wrays.push(WRay::from(unsafe {
+                        [
+                            *rays.get_unchecked(0),
+                            *rays.get_unchecked(1),
+                            *rays.get_unchecked(2),
+                            *rays.get_unchecked(3),
+                        ]
+                    }))
                 }
 
                 escaped_rays.clear();
@@ -652,7 +815,7 @@ impl<'a, N: ArrayLength<ChannelStorage> + ArrayLength<ChannelTileStorage>> Film<
                         &samples_2d,
                         depth,
                         ray,
-                        &mut new_samples
+                        &mut new_samples,
                     );
                 }
 

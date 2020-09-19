@@ -1,16 +1,16 @@
 use crate::{
-    camera::{CameraStore, CameraHandle, PinholeCamera},
-    light::{SphereLight, Light},
-    world::World,
-    material::MaterialStore,
+    camera::{CameraHandle, CameraStore, PinholeCamera},
     hitable::HitableStore,
-    volume::VolumeParams,
+    light::{Light, SphereLight},
+    material::MaterialStore,
     material::{Dielectric, Emissive},
-    sdf::{MandelBox, BoxFold, SphereFold, TracedSDF},
-    sky::Sky,
-    sphere::Sphere,
     math::{Extent2u, Vec2, Vec3},
+    sdf::{BoxFold, MandelBox, SphereFold, TracedSDF},
+    sky::Sky,
     spectrum::Srgb,
+    sphere::Sphere,
+    volume::VolumeParams,
+    world::World,
 };
 
 // The resolution of the output image
@@ -20,13 +20,13 @@ pub const RESOLUTION: Extent2u = Extent2u::new(900, 1200);
 // for SAMPLES here, there will actually be 8 samples per pixel.
 //
 // Increase this for higher overall quality/less noise.
-pub const SAMPLES: usize = 16;
+pub const SAMPLES: usize = 1;
 
 // The number of lights to sample at each path vertex (i.e. each intersection point). Must be between 0 and 4.
-pub const LIGHT_SAMPLES_PER_PATH_VERTEX: usize = 4;
+pub const LIGHT_SAMPLES_PER_PATH_VERTEX: usize = 1;
 
 // The number of marches (i.e. points along the ray) to sample for each ray for volume scattering.
-pub const VOLUME_MARCHES_PER_SAMPLE: usize = 3;
+pub const VOLUME_MARCHES_PER_SAMPLE: usize = 1;
 
 // The number of lights to sample at each sampled scatter point. Must be between 0 and 4.
 pub const LIGHT_SAMPLES_PER_VOLUME_MARCH: usize = 1;
@@ -41,14 +41,14 @@ pub const WORLD_RADIUS: f32 = 100.0;
 
 // The level of detail to render SDFs with (which is how the fractal is rendered).
 // Closer to 0 = smaller detail will be shown. Larger means less detail.
-pub const SDF_DETAIL_SCALE: f32 = 0.75;
+pub const SDF_DETAIL_SCALE: f32 = 4.0;
 
 // The number of iterations to run of the fractal function. More iterations will mean
 // higher potential detail but also higher render times. If you use lower iterations, the
 // surface of the fractal will be more sparsely defined, so you should use a higher SDF_DETAIL_SCALE
 // in order to see it better, whereas with more iterations the surface will be more defined so you can
 // use a lower (more detailed) SDF_DETAIL_SCALE.
-pub const FRACTAL_ITERATIONS: usize = 22;
+pub const FRACTAL_ITERATIONS: usize = 12;
 
 pub fn setup() -> (CameraHandle, World) {
     let mut materials = MaterialStore::new();
@@ -76,7 +76,7 @@ pub fn setup() -> (CameraHandle, World) {
     );
 
     // FRACTAL
-    // Here you can change the material properties for the fractal. Try changing the Srgb color and the roughness, 
+    // Here you can change the material properties for the fractal. Try changing the Srgb color and the roughness,
     // which should stay between 0.0 (completely smooth) and 1.0 (completely rough).
     let grey = materials.add_material(Dielectric::new_remap(Srgb::new(0.8, 0.3, 0.2), 0.75));
 
@@ -86,7 +86,12 @@ pub fn setup() -> (CameraHandle, World) {
         // It can also make the fractal significantly grow or shrink, so you might have to move the camera in tandem with changing these settings
         // to get a good look!
         // MandelBox::new(FRACTAL_ITERATIONS, BoxFold::new(1.0), SphereFold::new(0.5, 1.0), -2.0)
-        MandelBox::new(FRACTAL_ITERATIONS, BoxFold::new(1.1), SphereFold::new(0.09, 1.9), -2.0),
+        MandelBox::new(
+            FRACTAL_ITERATIONS,
+            BoxFold::new(1.1),
+            SphereFold::new(0.09, 1.9),
+            -2.0,
+        ),
         grey,
     ));
 

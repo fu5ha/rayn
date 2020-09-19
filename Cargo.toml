@@ -6,6 +6,7 @@ authors = ["Gray Olson <gray@grayolson.com>"]
 edition = "2018"
 
 [features]
+default = ["exr"]
 
 [profile.dev]
 opt-level = 3
@@ -29,3 +30,4 @@ pbr = "1.0.2"
 # quasi-rd = { path = "../quasi-rd" }
 quasi-rd = { git = "https://github.com/termhn/quasi-rd", branch = "master" }
 arrayref = "0.3"
+exr = { version = "0.9", optional = true }
