@@ -34,7 +34,7 @@ pub const WORLD_RADIUS: f32 = 100.0;
 
 // The level of detail to render SDFs with (which is how the fractal is rendered).
 // Closer to 0 = smaller detail will be shown. Larger means less detail.
-pub const SDF_DETAIL_SCALE: f32 = 2.0;
+pub const SDF_DETAIL_SCALE: f32 = 0.5;
 
 // The number of iterations to run of the fractal function. More iterations will mean
 // higher potential detail but also higher render times. If you use lower iterations, the

@@ -27,7 +27,7 @@ impl<S: SDF<f32x4, Wec3> + Send + Sync> Hitable for TracedSDF<S> {
         let max_dist = dir.mag();
         let dir = dir / max_dist;
 
-        let dist = self.sdf.dist(start).abs();
+        let dist = self.sdf.dist(start);
 
         let nan_mask = dist.cmp_nan(dist);
         let gt_mask = dist.cmp_gt(max_dist);
@@ -43,9 +43,9 @@ impl<S: SDF<f32x4, Wec3> + Send + Sync> Hitable for TracedSDF<S> {
             }
 
             let point = dir.mul_add(Wec3::broadcast(t), start);
-            let dist = self.sdf.dist(point).abs();
+            let dist = self.sdf.dist(point);
 
-            hit_mask = dist.cmp_lt(f32x4::from(0.0001 * SDF_DETAIL_SCALE).max(f32x4::from(0.00001 * SDF_DETAIL_SCALE) * t));
+            hit_mask = dist.abs().cmp_lt(f32x4::from(0.0001 * SDF_DETAIL_SCALE).max(f32x4::from(0.00001 * SDF_DETAIL_SCALE) * t));
 
             let hit_gt_nan_mask = hit_mask | gt_nan_mask;
             if hit_gt_nan_mask.move_mask() == 0b1111 {
@@ -57,16 +57,16 @@ impl<S: SDF<f32x4, Wec3> + Send + Sync> Hitable for TracedSDF<S> {
     }
 
     fn hit(&self, ray: &WRay, t_max: f32x4, hit_threshold_at: &dyn Fn(f32x4) -> f32x4) -> f32x4 {
-        let dist = self.sdf.dist(ray.origin).abs();
+        let dist = self.sdf.dist(ray.origin);
         let mut t = dist;
 
         let nan_mask = t.cmp_nan(t);
 
         for _march in 0..MAX_MARCHES {
             let point = ray.point_at(t);
-            let dist = self.sdf.dist(point).abs();
+            let dist = self.sdf.dist(point);
 
-            let hit_mask = dist.cmp_lt(
+            let hit_mask = dist.abs().cmp_lt(
                 f32x4::from(0.00005 * SDF_DETAIL_SCALE)
                     .max(f32x4::from(0.05 * SDF_DETAIL_SCALE) * hit_threshold_at(t)));
 
